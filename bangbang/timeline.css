@@ -1,0 +1,433 @@
+/* Bangbang growth timeline */
+
+.bangbang-page {
+  --bb-ink: #4a3728;
+  --bb-soft: #6b5344;
+  --bb-line: rgba(166, 124, 82, 0.55);
+  --bb-dot: #c8a07e;
+  --bb-paper: rgba(255, 252, 245, 0.96);
+  --bb-shadow: 0 18px 40px rgba(74, 55, 40, 0.16);
+}
+
+.bb-main {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.5rem 0 3.5rem;
+}
+
+.bb-hero {
+  text-align: center;
+  padding: 1.25rem 0.5rem 2.25rem;
+}
+
+.bb-kicker {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.72);
+  border: 1px solid rgba(180, 140, 100, 0.28);
+  color: var(--bb-soft);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.bb-hero h1 {
+  font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+  font-size: clamp(2rem, 4.5vw, 3.1rem);
+  font-weight: 700;
+  color: var(--bb-ink);
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.bb-lead {
+  max-width: 34rem;
+  margin: 0.9rem auto 0;
+  color: var(--bb-soft);
+  font-size: 1.02rem;
+}
+
+.bb-era {
+  margin-bottom: 2.25rem;
+  padding: 1.5rem 1.25rem 1.75rem;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 245, 0.88), rgba(247, 240, 228, 0.78));
+  border: 1px solid rgba(180, 140, 100, 0.28);
+  box-shadow: var(--bb-shadow);
+  backdrop-filter: blur(10px);
+}
+
+.bb-era-late {
+  background:
+    linear-gradient(180deg, rgba(255, 248, 236, 0.9), rgba(242, 228, 205, 0.82));
+}
+
+.bb-era-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.35rem;
+  padding: 0 0.35rem;
+}
+
+.bb-era-label {
+  color: #a67c52;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+.bb-era-head h2 {
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  color: var(--bb-ink);
+  letter-spacing: 0.03em;
+}
+
+.bb-era-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(180, 140, 100, 0.25);
+  color: var(--bb-soft);
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bb-era-arrow {
+  width: 2rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--bb-line), transparent);
+  position: relative;
+}
+
+.bb-era-arrow::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--bb-line);
+  border-top: 1.5px solid var(--bb-line);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.bb-rail-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.35rem 0.25rem 0.5rem;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bb-rail-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+.bb-rail-wrap::-webkit-scrollbar-thumb {
+  background: rgba(168, 124, 82, 0.35);
+  border-radius: 999px;
+}
+
+.bb-rail {
+  --rail-h: 440px;
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(148px, 1fr);
+  align-items: stretch;
+  min-width: 920px;
+  min-height: var(--rail-h);
+  padding: 0 0.5rem;
+}
+
+.bb-spine {
+  position: absolute;
+  left: 1.5%;
+  right: 1.5%;
+  top: 50%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--bb-line) 4%,
+    var(--bb-line) 96%,
+    transparent 100%
+  );
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.bb-spine::before,
+.bb-spine::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bb-dot);
+  box-shadow: 0 0 0 4px rgba(200, 160, 126, 0.22);
+  transform: translateY(-50%);
+}
+
+.bb-spine::before { left: 0; }
+.bb-spine::after { right: 0; }
+
+.bb-node {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr 18px 1fr;
+  justify-items: center;
+  align-items: center;
+  min-height: var(--rail-h);
+  height: var(--rail-h);
+  scroll-snap-align: center;
+  animation: bb-rise 0.7s ease both;
+}
+
+.bb-node:nth-child(2) { animation-delay: 0.05s; }
+.bb-node:nth-child(3) { animation-delay: 0.1s; }
+.bb-node:nth-child(4) { animation-delay: 0.15s; }
+.bb-node:nth-child(5) { animation-delay: 0.2s; }
+.bb-node:nth-child(6) { animation-delay: 0.25s; }
+.bb-node:nth-child(7) { animation-delay: 0.3s; }
+
+@keyframes bb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bb-dot {
+  grid-row: 2;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f3e0c8, #b8865a 70%);
+  border: 2px solid #fff8ef;
+  box-shadow: 0 0 0 3px rgba(184, 134, 90, 0.25);
+  z-index: 2;
+}
+
+.bb-up .bb-card {
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: 0.7rem;
+  transform: rotate(-2.2deg);
+}
+
+.bb-up time {
+  grid-row: 3;
+  align-self: start;
+  margin-top: 0.55rem;
+}
+
+.bb-down .bb-card {
+  grid-row: 3;
+  align-self: start;
+  margin-top: 0.7rem;
+  transform: rotate(2deg);
+}
+
+.bb-down time {
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: 0.55rem;
+}
+
+.bb-card {
+  width: min(132px, 28vw);
+  aspect-ratio: 3 / 4;
+  padding: 0.55rem 0.55rem 1.15rem;
+  border: 0;
+  border-radius: 4px 4px 10px 10px;
+  background: var(--bb-paper);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 14px 28px rgba(74, 55, 40, 0.18);
+  cursor: zoom-in;
+  transition: transform 0.28s ease, box-shadow 0.28s ease;
+}
+
+.bb-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 2px;
+  background: #efe6d8;
+}
+
+.bb-card:hover,
+.bb-card:focus-visible {
+  transform: rotate(0deg) translateY(-6px) scale(1.04);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 22px 40px rgba(74, 55, 40, 0.24);
+  outline: none;
+}
+
+.bb-node time {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.2rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(180, 140, 100, 0.28);
+  color: var(--bb-ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.bb-footnote {
+  text-align: center;
+  color: rgba(74, 55, 40, 0.72);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bb-node {
+    animation: none;
+  }
+
+  .bb-card,
+  .bb-card:hover,
+  .bb-card:focus-visible {
+    transition: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .bb-era-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bb-rail {
+    --rail-h: 390px;
+    min-width: 860px;
+    grid-auto-columns: 136px;
+  }
+
+  .bb-card {
+    width: 118px;
+  }
+}
+
+@media (max-width: 560px) {
+  .bb-main {
+    width: min(100% - 1.25rem, 1180px);
+  }
+
+  .bb-era {
+    padding: 1.15rem 0.7rem 1.35rem;
+    border-radius: 22px;
+  }
+
+  /* Stack into a vertical timeline on small phones */
+  .bb-rail-wrap {
+    overflow: visible;
+  }
+
+  .bb-rail {
+    --rail-h: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.5rem 0 0.25rem 0.15rem;
+  }
+
+  .bb-spine {
+    left: 18px;
+    right: auto;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 2px;
+    height: auto;
+    transform: none;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      var(--bb-line) 4%,
+      var(--bb-line) 96%,
+      transparent 100%
+    );
+  }
+
+  .bb-spine::before,
+  .bb-spine::after {
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, 0);
+  }
+
+  .bb-spine::before { top: 0; }
+  .bb-spine::after { top: auto; bottom: 0; }
+
+  .bb-node {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.95rem;
+    height: auto;
+    min-height: 0;
+    padding: 0.85rem 0 0.85rem 0.2rem;
+  }
+
+  .bb-up .bb-card,
+  .bb-down .bb-card,
+  .bb-up time,
+  .bb-down time {
+    grid-row: auto;
+    align-self: center;
+    margin: 0;
+  }
+
+  .bb-dot {
+    flex: 0 0 auto;
+    order: 1;
+    margin-left: 5px;
+  }
+
+  .bb-up .bb-card,
+  .bb-down .bb-card {
+    order: 2;
+    transform: rotate(-1deg);
+    width: min(42vw, 150px);
+  }
+
+  .bb-down .bb-card {
+    transform: rotate(1deg);
+  }
+
+  .bb-up time,
+  .bb-down time {
+    order: 3;
+  }
+}

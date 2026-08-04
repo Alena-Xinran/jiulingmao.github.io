@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "T99Z7694Z3.com.ninelives.cat",
+        "paths": ["/app/*", "/app/"]
+      }
+    ]
+  }
+}
