@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /doctor/
 
 Sitemap: https://www.jiulingmao.com/sitemap.xml

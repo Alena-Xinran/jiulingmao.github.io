@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>九龄猫医生工作台</title>
+  <meta name="description" content="九龄猫签约兽医工作台：查看咨询、阅读检测档案并回复主人。">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="canonical" href="https://www.jiulingmao.com/doctor/">
+  <link rel="stylesheet" href="../styles.css?v=18">
+  <link rel="stylesheet" href="doctor.css?v=1">
+  <link rel="icon" href="../logo.png" type="image/png">
+</head>
+<body class="doctor-page">
+  <div class="sky-canvas" aria-hidden="true">
+    <div class="oil-cloud oil-cloud-1"></div>
+    <div class="oil-cloud oil-cloud-2"></div>
+    <div class="oil-cloud oil-cloud-3"></div>
+    <div class="oil-cloud oil-cloud-4"></div>
+    <div class="oil-cloud oil-cloud-5"></div>
+    <div class="sky-horizon-glow"></div>
+  </div>
+
+  <nav class="site-nav">
+    <div class="container">
+      <a class="brand" href="/">
+        <img class="brand-mark" src="../logo.png" alt="九龄猫">
+        九龄猫 · 医生工作台
+      </a>
+      <ul class="nav-links">
+        <li><a href="/">官网首页</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="doc-main">
+    <section id="view-login" class="doc-login-wrap" hidden>
+      <div class="doc-login-card">
+        <img class="doc-login-logo" src="../logo.png" alt="">
+        <h1>九龄猫 · 医生端</h1>
+        <p class="doc-login-sub">真实医生评价平台 · 网页工作台</p>
+        <form id="login-form" autocomplete="on">
+          <label class="doc-field">
+            <span>账号</span>
+            <input id="login-name" name="username" type="text" inputmode="text" autocomplete="username" placeholder="请输入医生账号" required>
+          </label>
+          <label class="doc-field">
+            <span>密码</span>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+          </label>
+          <button class="doc-btn-primary" id="login-submit" type="submit">登 录</button>
+        </form>
+        <p class="doc-login-hint">仅限已注册医生账号。养猫用户请使用「九龄猫」小程序或 App。</p>
+      </div>
+    </section>
+
+    <section id="view-work" class="doc-work" hidden>
+      <header class="doc-toolbar">
+        <div class="doc-who">
+          <img id="toolbar-avatar" class="doc-who-avatar" alt="">
+          <div class="doc-who-text">
+            <strong id="toolbar-name">医生</strong>
+            <span id="toolbar-title">未填写专业</span>
+          </div>
+        </div>
+        <div class="doc-toolbar-actions">
+          <button type="button" class="doc-btn-ghost" id="btn-refresh">刷新</button>
+          <button type="button" class="doc-btn-ghost" id="btn-edit-profile">编辑资料</button>
+          <button type="button" class="doc-btn-ghost" id="btn-logout">退出</button>
+        </div>
+      </header>
+
+      <p class="doc-notify-note">新咨询的微信提醒仍走「九龄猫医生端」小程序。本页可在电脑上查看档案并回复。</p>
+
+      <div class="doc-tabs" role="tablist">
+        <button type="button" class="doc-tab is-active" data-filter="pending" role="tab" aria-selected="true">
+          待回复 <span class="doc-tab-count" id="pending-count" hidden>0</span>
+        </button>
+        <button type="button" class="doc-tab" data-filter="answered" role="tab" aria-selected="false">已回复</button>
+      </div>
+
+      <div class="doc-split">
+        <aside class="doc-list-pane">
+          <div id="consult-list" class="doc-list"></div>
+          <p id="list-empty" class="doc-empty" hidden>暂无待回复的咨询</p>
+          <p id="list-loading" class="doc-empty">加载中…</p>
+        </aside>
+        <article class="doc-detail-pane" id="detail-pane">
+          <div id="detail-empty" class="doc-detail-empty">
+            <p>从左侧选择一条咨询</p>
+            <span>可查看猫咪档案、检测图、AI 初判和近期记录，再给出判断。</span>
+          </div>
+          <div id="detail-body" hidden></div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div id="profile-mask" class="doc-mask" hidden>
+    <div class="doc-modal" role="dialog" aria-labelledby="profile-title">
+      <h2 id="profile-title">编辑资料</h2>
+      <div class="doc-avatar-row">
+        <img id="profile-avatar" class="doc-modal-avatar" alt="">
+        <div class="doc-avatar-actions">
+          <label class="doc-btn-small">
+            选择自定义头像
+            <input id="profile-avatar-file" type="file" accept="image/*" hidden>
+          </label>
+          <button type="button" class="doc-btn-small is-ghost" id="btn-clear-avatar">恢复默认</button>
+        </div>
+      </div>
+      <label class="doc-field">
+        <span>姓名</span>
+        <input id="profile-name" type="text" maxlength="20" placeholder="如：陈医生">
+      </label>
+      <label class="doc-field">
+        <span>专业</span>
+        <input id="profile-title" type="text" maxlength="40" placeholder="如：猫科行为学">
+      </label>
+      <div class="doc-field">
+        <span>性别</span>
+        <div class="doc-gender" id="profile-gender">
+          <button type="button" class="doc-chip" data-g="female">女</button>
+          <button type="button" class="doc-chip" data-g="male">男</button>
+        </div>
+      </div>
+      <div class="doc-modal-btns">
+        <button type="button" class="doc-btn-ghost-dark" id="btn-profile-cancel">取消</button>
+        <button type="button" class="doc-btn-primary" id="btn-profile-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lightbox" class="doc-lightbox" hidden>
+    <button type="button" class="doc-lightbox-close" aria-label="关闭">&times;</button>
+    <img id="lightbox-img" alt="检测照片">
+  </div>
+
+  <div id="toast" class="doc-toast" hidden></div>
+
+  <script src="doctor.js?v=1"></script>
+</body>
+</html>
