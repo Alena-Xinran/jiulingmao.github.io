@@ -43,6 +43,8 @@
 
   var state = {
     doctor: null,
+    section: "clients",
+    scope: "mine",
     filter: "pending",
     records: [],
     pendingCount: 0,
@@ -55,7 +57,11 @@
     submitting: false,
     quickReplies: [],
     profile: { name: "", title: "", gender: "female", avatar_url: "" },
-    refreshTimer: null
+    refreshTimer: null,
+    clients: [],
+    clientCurrent: null,
+    clientCat: null,
+    clientSearch: ""
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -303,11 +309,171 @@
     stopRefresh();
   }
 
+  function showSection(section) {
+    state.section = section;
+    if (section === "clients") {
+      state.scope = "mine";
+    } else if (section === "consult-mine") {
+      state.scope = "mine";
+    } else {
+      state.scope = "platform";
+    }
+    document.querySelectorAll(".doc-main-tabs .doc-tab").forEach(function (t) {
+      t.classList.toggle("is-active", t.getAttribute("data-section") === section);
+    });
+    $("pane-clients").hidden = section !== "clients";
+    $("pane-consult").hidden = section === "clients";
+    if (section === "clients") {
+      loadClients();
+    } else {
+      closeDetail();
+      loadList();
+    }
+  }
+
+  function loadClients() {
+    $("client-loading").hidden = false;
+    $("client-empty").hidden = true;
+    var q = state.clientSearch ? ("?q=" + encodeURIComponent(state.clientSearch)) : "";
+    return api("/api/v1/doctor/clients" + q).then(function (res) {
+      state.clients = (res && res.records) || [];
+      $("client-loading").hidden = true;
+      renderClients();
+    }).catch(function (err) {
+      $("client-loading").hidden = true;
+      if (handleAuthError(err)) return;
+      toast(networkMessage(err, "加载客户失败"));
+    });
+  }
+
+  function renderClients() {
+    var list = $("client-list");
+    var empty = $("client-empty");
+    if (!state.clients.length) {
+      list.innerHTML = "";
+      empty.hidden = false;
+      empty.textContent = state.clientSearch ? "没有匹配的客户" : "还没有诊所客户。把上面的推荐码发给家长即可。";
+      return;
+    }
+    empty.hidden = true;
+    list.innerHTML = state.clients.map(function (c) {
+      var active = state.clientCurrent && state.clientCurrent.user && state.clientCurrent.user.id === c.user_id ? " is-active" : "";
+      var title = c.alias || c.nickname || "用户";
+      var sub = (c.alias && c.nickname ? c.nickname + " · " : "") +
+        (c.cat_count ? c.cat_count + " 只猫" : "还没建档") +
+        (c.cat_names ? " · " + c.cat_names : "");
+      return (
+        '<button type="button" class="doc-card' + active + '" data-user="' + escapeHtml(c.user_id) + '">' +
+          '<div class="doc-card-head">' +
+            '<img class="card-avatar" src="' + escapeHtml(c.avatar_url ? uploadUrl(c.avatar_url) : avatarFallback(title, "doctor")) + '" alt="">' +
+            '<div class="doc-card-names"><strong>' + escapeHtml(title) + "</strong>" +
+            '<span>' + escapeHtml(sub) + "</span></div>" +
+            (c.pending_count ? '<span class="doc-module-tag">待回复 ' + c.pending_count + "</span>" : "") +
+          "</div></button>"
+      );
+    }).join("");
+  }
+
+  function openClient(userId) {
+    api("/api/v1/doctor/clients/" + encodeURIComponent(userId)).then(function (res) {
+      state.clientCurrent = res;
+      state.clientCat = null;
+      renderClients();
+      renderClientDetail();
+    }).catch(function (err) {
+      if (handleAuthError(err)) return;
+      toast(networkMessage(err, "加载客户失败"));
+    });
+  }
+
+  function renderClientDetail() {
+    var empty = $("client-detail-empty");
+    var body = $("client-detail-body");
+    var pane = $("client-detail-pane");
+    if (!state.clientCurrent) {
+      empty.hidden = false;
+      body.hidden = true;
+      pane.classList.remove("is-open");
+      return;
+    }
+    empty.hidden = true;
+    body.hidden = false;
+    pane.classList.add("is-open");
+    var u = state.clientCurrent.user || {};
+    var cats = state.clientCurrent.cats || [];
+    var html = '<div class="detail-close-bar"><strong>客户档案</strong>' +
+      '<button type="button" class="doc-btn-ghost" id="btn-close-client">关闭</button></div>' +
+      '<div class="doc-detail"><div class="detail-head">' +
+      '<img class="detail-cat-avatar" src="' + escapeHtml(u.avatar_url ? uploadUrl(u.avatar_url) : avatarFallback(u.display_name, "doctor")) + '" alt="">' +
+      "<div><div class=\"detail-cat-name\">" + escapeHtml(u.display_name || u.nickname || "用户") + "</div>" +
+      '<div class="detail-cat-meta">家长 ' + escapeHtml(u.nickname || "") +
+      " · 名下 " + (state.clientCurrent.cat_count || 0) + " 只猫 · 绑定于 " + escapeHtml(formatTime(u.bound_at)) +
+      "</div></div></div>";
+    html += '<section class="detail-section"><h3>给你看的备注名</h3>' +
+      '<div class="alias-row"><input id="client-alias" maxlength="20" value="' + escapeHtml(u.alias || "") +
+      '" placeholder="如：王女士 / 小白家长">' +
+      '<button type="button" class="doc-btn-ghost" id="btn-save-alias">保存</button></div></section>';
+    html += '<section class="detail-section"><h3>猫咪</h3>';
+    if (!cats.length) {
+      html += '<p class="doc-empty">这位家长还没建猫咪档案</p>';
+    } else {
+      html += '<div class="cat-mini-grid">' + cats.map(function (cat) {
+        return '<button type="button" class="cat-mini-card" data-cat="' + escapeHtml(cat.id) + '">' +
+          "<strong>" + escapeHtml(cat.name) + "</strong>" +
+          '<span class="client-meta">' + escapeHtml([cat.breed || "品种未填", cat.gender === "male" ? "公" : cat.gender === "female" ? "母" : "", cat.neutered ? "已绝育" : "未绝育"].filter(Boolean).join(" · ")) + "</span>" +
+          '<span class="client-meta">' + (cat.scan_count ? cat.scan_count + " 条检测" : "还没检测") + "</span></button>";
+      }).join("") + "</div>";
+    }
+    html += "</section>";
+    if (state.clientCat) {
+      var cat = state.clientCat.cat || {};
+      var scans = state.clientCat.scans || [];
+      html += '<section class="detail-section"><h3>' + escapeHtml(cat.name) + " 的检测</h3>";
+      if (cat.medical_history) {
+        html += '<div class="detail-text">病史：' + escapeHtml(cat.medical_history) + "</div>";
+      }
+      if (!scans.length) {
+        html += '<p class="doc-empty">这只猫还没有检测记录</p>';
+      } else {
+        html += scans.map(function (s) {
+          return '<div class="history-card"><div class="history-card-head">' +
+            (s.image_path ? '<img class="history-thumb" src="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '" alt="" data-preview="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '">' : '<div class="history-thumb"></div>') +
+            '<div class="history-meta"><span class="doc-module-tag">' + escapeHtml(moduleLabel(s.module)) + "</span>" +
+            '<span class="history-summary">' + escapeHtml(historySummary(s)) + "</span>" +
+            '<span class="history-date">' + escapeHtml(formatTime(s.created_at)) + "</span></div></div></div>";
+        }).join("");
+      }
+      html += "</section>";
+    }
+    var consults = state.clientCurrent.consultations || [];
+    if (consults.length) {
+      html += '<section class="detail-section"><h3>问诊记录</h3>' + consults.map(function (c) {
+        return '<div class="ctx-item"><span class="ctx-item-label">' + escapeHtml(c.status === "pending" ? "待回复" : "已回复") +
+          "</span><span class=\"ctx-item-value\">" + escapeHtml((c.cat_name || "") + " · " + moduleLabel(c.module) + " · " + formatTime(c.created_at)) +
+          "</span></div>";
+      }).join("") + "</section>";
+    }
+    html += "</div>";
+    body.innerHTML = html;
+  }
+
+  function copyText(text, okMsg) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast(okMsg); }).catch(function () {
+        window.prompt("复制：", text);
+      });
+    } else {
+      window.prompt("复制：", text);
+    }
+  }
+
   function showWork() {
     $("view-login").hidden = true;
     $("view-work").hidden = false;
     renderToolbar();
     startRefresh();
+    showSection(state.section || "clients");
   }
 
   function renderToolbar() {
@@ -317,6 +483,18 @@
     var img = $("toolbar-avatar");
     img.src = doctorAvatar(info);
     img.alt = info.name || "医生";
+    var code = info.referral_code || "";
+    $("referral-bar").hidden = !code;
+    $("referral-code").textContent = code || "————";
+    var n = Number(info.client_count || 0);
+    $("referral-count").textContent = n ? ("已绑定 " + n + " 位诊所客户") : "还没有绑定客户";
+    var cc = $("client-count");
+    if (n > 0) {
+      cc.hidden = false;
+      cc.textContent = String(n);
+    } else {
+      cc.hidden = true;
+    }
   }
 
   function decorateRecord(r) {
@@ -339,10 +517,12 @@
     state.loading = true;
     $("list-loading").hidden = false;
     $("list-empty").hidden = true;
-    var listP = api("/api/v1/doctor/consultations?status=" + encodeURIComponent(state.filter));
+    var q = "/api/v1/doctor/consultations?status=" + encodeURIComponent(state.filter) +
+      "&scope=" + encodeURIComponent(state.scope);
+    var listP = api(q);
     var countP = state.filter === "pending"
       ? Promise.resolve(null)
-      : api("/api/v1/doctor/consultations?status=pending");
+      : api("/api/v1/doctor/consultations?status=pending&scope=" + encodeURIComponent(state.scope));
     return Promise.all([listP, countP]).then(function (results) {
       var list = results[0] || {};
       state.records = (list.records || []).map(decorateRecord);
@@ -375,7 +555,9 @@
     if (!state.records.length) {
       list.innerHTML = "";
       empty.hidden = false;
-      empty.textContent = state.filter === "pending" ? "暂无待回复的咨询" : "还没有已回复的记录";
+      empty.textContent = state.filter === "pending"
+        ? (state.scope === "mine" ? "暂无诊所客户的待回复" : "暂无平台待回复")
+        : "还没有已回复的记录";
       return;
     }
     empty.hidden = true;
@@ -392,7 +574,8 @@
             '<img class="card-avatar" src="' + escapeHtml(catAvatar(item.cat)) + '" alt="">' +
             '<div class="doc-card-names">' +
               "<strong>" + escapeHtml((item.cat && item.cat.name) || "猫咪") + "</strong>" +
-              "<span>来自 " + escapeHtml(item.owner_nickname || "用户") + "</span>" +
+              "<span>来自 " + escapeHtml(item.owner_alias || item.owner_nickname || "用户") +
+              (item.cat_count ? " · 名下 " + item.cat_count + " 只猫" : "") + "</span>" +
             "</div>" +
             '<span class="doc-module-tag">' + escapeHtml(moduleLabel(scan.module)) + "</span>" +
           "</div>" +
@@ -701,7 +884,8 @@
     stopRefresh();
     state.refreshTimer = setInterval(function () {
       if (document.hidden || $("view-work").hidden) return;
-      loadList();
+      if (state.section === "clients") loadClients();
+      else loadList();
     }, 45000);
   }
 
@@ -803,7 +987,6 @@
           showWork();
           loadMe();
           loadQuickReplies();
-          loadList();
         })
         .catch(function (err) {
           toast(networkMessage(err, "登录失败"));
@@ -814,15 +997,21 @@
         });
     });
 
-    document.querySelectorAll(".doc-tab").forEach(function (tab) {
+    document.querySelectorAll(".doc-main-tabs .doc-tab").forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        var section = tab.getAttribute("data-section");
+        if (!section || section === state.section) return;
+        showSection(section);
+      });
+    });
+
+    document.querySelectorAll(".doc-sub-tabs .doc-tab").forEach(function (tab) {
       tab.addEventListener("click", function () {
         var filter = tab.getAttribute("data-filter");
-        if (filter === state.filter) return;
+        if (!filter || filter === state.filter) return;
         state.filter = filter;
-        document.querySelectorAll(".doc-tab").forEach(function (t) {
-          var on = t === tab;
-          t.classList.toggle("is-active", on);
-          t.setAttribute("aria-selected", on ? "true" : "false");
+        document.querySelectorAll(".doc-sub-tabs .doc-tab").forEach(function (t) {
+          t.classList.toggle("is-active", t === tab);
         });
         closeDetail();
         loadList();
@@ -881,7 +1070,64 @@
       if (e.target.id === "reply-note") state.reply.note = e.target.value;
     });
 
-    $("btn-refresh").addEventListener("click", function () { loadList(); });
+    $("btn-refresh").addEventListener("click", function () {
+      if (state.section === "clients") loadClients();
+      else loadList();
+    });
+    $("btn-copy-code").addEventListener("click", function () {
+      copyText((state.doctor && state.doctor.referral_code) || "", "推荐码已复制");
+    });
+    $("btn-copy-link").addEventListener("click", function () {
+      copyText((state.doctor && state.doctor.referral_url) || "", "链接已复制，发给诊所客户");
+    });
+    $("client-search").addEventListener("input", function (e) {
+      state.clientSearch = e.target.value || "";
+      clearTimeout(loadClients._t);
+      loadClients._t = setTimeout(loadClients, 280);
+    });
+    $("client-list").addEventListener("click", function (e) {
+      var card = e.target.closest("[data-user]");
+      if (!card) return;
+      openClient(card.getAttribute("data-user"));
+    });
+    $("client-detail-body").addEventListener("click", function (e) {
+      var preview = e.target.getAttribute("data-preview");
+      if (preview) {
+        openLightbox(preview);
+        return;
+      }
+      if (e.target.id === "btn-close-client") {
+        state.clientCurrent = null;
+        state.clientCat = null;
+        renderClients();
+        renderClientDetail();
+        return;
+      }
+      if (e.target.id === "btn-save-alias") {
+        var uid = state.clientCurrent && state.clientCurrent.user && state.clientCurrent.user.id;
+        var alias = ($("client-alias") && $("client-alias").value) || "";
+        if (!uid) return;
+        api("/api/v1/doctor/clients/" + encodeURIComponent(uid), "PATCH", { alias: alias }).then(function () {
+          toast("备注已保存");
+          openClient(uid);
+        }).catch(function (err) {
+          toast(networkMessage(err, "保存失败"));
+        });
+        return;
+      }
+      var catBtn = e.target.closest("[data-cat]");
+      if (catBtn && state.clientCurrent && state.clientCurrent.user) {
+        var uid2 = state.clientCurrent.user.id;
+        api("/api/v1/doctor/clients/" + encodeURIComponent(uid2) + "/cats/" + encodeURIComponent(catBtn.getAttribute("data-cat")))
+          .then(function (res) {
+            state.clientCat = res;
+            renderClientDetail();
+          })
+          .catch(function (err) {
+            toast(networkMessage(err, "加载失败"));
+          });
+      }
+    });
     $("btn-edit-profile").addEventListener("click", openProfile);
     $("btn-logout").addEventListener("click", function () {
       if (window.confirm("退出登录？会返回登录页")) {
@@ -940,7 +1186,6 @@
       showWork();
       loadMe();
       loadQuickReplies();
-      loadList();
     } else {
       showLogin();
     }

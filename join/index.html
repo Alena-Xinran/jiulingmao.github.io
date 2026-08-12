@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>绑定我的医生｜九龄猫</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="../styles.css?v=18">
+  <link rel="icon" href="../logo.png" type="image/png">
+  <style>
+    .join-card {
+      width: min(100% - 2rem, 440px);
+      margin: 4rem auto 3rem;
+      background: var(--card);
+      border: 2px solid rgba(255,255,255,.7);
+      border-radius: var(--radius);
+      padding: 2rem 1.6rem;
+      box-shadow: 0 12px 40px var(--shadow-strong);
+      position: relative;
+      z-index: 1;
+      text-align: center;
+    }
+    .join-card h1 { font-size: 1.4rem; color: var(--primary-deepest); }
+    .join-card p { margin-top: .7rem; color: var(--text-secondary); font-size: .92rem; }
+    .join-code {
+      margin: 1.1rem 0;
+      font-size: 1.8rem;
+      letter-spacing: .18em;
+      font-weight: 800;
+      color: var(--primary-deep);
+    }
+    .join-steps { text-align: left; margin-top: 1.2rem; color: var(--text-secondary); font-size: .88rem; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="sky-canvas" aria-hidden="true">
+    <div class="oil-cloud oil-cloud-1"></div>
+    <div class="oil-cloud oil-cloud-2"></div>
+    <div class="oil-cloud oil-cloud-3"></div>
+    <div class="sky-horizon-glow"></div>
+  </div>
+  <nav class="site-nav">
+    <div class="container">
+      <a class="brand" href="/"><img class="brand-mark" src="../logo.png" alt="">九龄猫</a>
+    </div>
+  </nav>
+  <main class="join-card">
+    <h1 id="title">你的兽医推荐了九龄猫</h1>
+    <p id="lead">居家拍照检测后，结果会回到这位医生这边，方便随访，不用反复跑医院问同一件事。</p>
+    <div class="join-code" id="code">————</div>
+    <p>打开微信小程序「九龄猫」，在用户中心填写这个推荐码即可绑定。自然下载的用户不用填，不影响使用。</p>
+    <ol class="join-steps">
+      <li>微信搜索小程序「九龄猫」并登录</li>
+      <li>进入「用户中心」→「兽医给了推荐码」</li>
+      <li>填入上方推荐码，之后问诊会发给这位医生</li>
+    </ol>
+  </main>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var code = (params.get("code") || "").trim().toUpperCase();
+      if (code) document.getElementById("code").textContent = code;
+      if (!code) return;
+      fetch("https://catapi.jiulingmao.com/api/v1/doctor/referral/" + encodeURIComponent(code))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var d = data && data.doctor;
+          if (!d) return;
+          document.getElementById("title").textContent = (d.name || "医生") + " 推荐你使用九龄猫";
+          if (d.title) {
+            document.getElementById("lead").textContent = d.title + " · 居家检测会回到这位医生的工作台，方便随访。";
+          }
+        })
+        .catch(function () {});
+    })();
+  </script>
+</body>
+</html>

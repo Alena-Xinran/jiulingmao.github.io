@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="canonical" href="https://www.jiulingmao.com/doctor/">
   <link rel="stylesheet" href="../styles.css?v=18">
-  <link rel="stylesheet" href="doctor.css?v=1">
+  <link rel="stylesheet" href="doctor.css?v=2">
   <link rel="icon" href="../logo.png" type="image/png">
 </head>
 <body class="doctor-page">
@@ -37,8 +37,8 @@
     <section id="view-login" class="doc-login-wrap" hidden>
       <div class="doc-login-card">
         <img class="doc-login-logo" src="../logo.png" alt="">
-        <h1>九龄猫 · 医生端</h1>
-        <p class="doc-login-sub">真实医生评价平台 · 网页工作台</p>
+        <h1>九龄猫 · 医生工作台</h1>
+        <p class="doc-login-sub">把产品给自己的客户用，居家检测会回到你这边</p>
         <form id="login-form" autocomplete="on">
           <label class="doc-field">
             <span>账号</span>
@@ -70,28 +70,65 @@
         </div>
       </header>
 
-      <p class="doc-notify-note">新咨询的微信提醒仍走「九龄猫医生端」小程序。本页可在电脑上查看档案并回复。</p>
+      <p class="doc-notify-note">把推荐码给诊所客户。他们用九龄猫检测后，会作为「你的客户」出现在这里。自然来的用户不会绑到你名下。</p>
 
-      <div class="doc-tabs" role="tablist">
-        <button type="button" class="doc-tab is-active" data-filter="pending" role="tab" aria-selected="true">
-          待回复 <span class="doc-tab-count" id="pending-count" hidden>0</span>
-        </button>
-        <button type="button" class="doc-tab" data-filter="answered" role="tab" aria-selected="false">已回复</button>
+      <div class="doc-referral" id="referral-bar" hidden>
+        <div>
+          <div class="doc-referral-label">给你客户的推荐码</div>
+          <strong id="referral-code">————</strong>
+          <div class="doc-referral-hint" id="referral-count">还没有绑定客户</div>
+        </div>
+        <div class="doc-toolbar-actions">
+          <button type="button" class="doc-btn-ghost" id="btn-copy-code">复制推荐码</button>
+          <button type="button" class="doc-btn-ghost" id="btn-copy-link">复制链接</button>
+        </div>
       </div>
 
-      <div class="doc-split">
-        <aside class="doc-list-pane">
-          <div id="consult-list" class="doc-list"></div>
-          <p id="list-empty" class="doc-empty" hidden>暂无待回复的咨询</p>
-          <p id="list-loading" class="doc-empty">加载中…</p>
-        </aside>
-        <article class="doc-detail-pane" id="detail-pane">
-          <div id="detail-empty" class="doc-detail-empty">
-            <p>从左侧选择一条咨询</p>
-            <span>可查看猫咪档案、检测图、AI 初判和近期记录，再给出判断。</span>
-          </div>
-          <div id="detail-body" hidden></div>
-        </article>
+      <div class="doc-tabs doc-main-tabs" role="tablist">
+        <button type="button" class="doc-tab is-active" data-section="clients">我的客户 <span class="doc-tab-count" id="client-count" hidden>0</span></button>
+        <button type="button" class="doc-tab" data-section="consult-mine">客户问诊 <span class="doc-tab-count" id="pending-count" hidden>0</span></button>
+        <button type="button" class="doc-tab" data-section="consult-platform">平台问诊</button>
+      </div>
+
+      <div id="pane-clients" class="doc-clients-pane">
+        <div class="doc-split">
+          <aside class="doc-list-pane">
+            <div class="doc-clients-toolbar">
+              <input id="client-search" type="search" placeholder="搜客户昵称、备注或猫名" autocomplete="off">
+            </div>
+            <div id="client-list" class="doc-list"></div>
+            <p id="client-empty" class="doc-empty">还没有诊所客户。把上面的推荐码发给家长即可。</p>
+            <p id="client-loading" class="doc-empty" hidden>加载中…</p>
+          </aside>
+          <article class="doc-detail-pane" id="client-detail-pane">
+            <div class="doc-detail-empty" id="client-detail-empty">
+              <p>从左侧选择一位客户</p>
+              <span>可看到这位家长名下全部猫咪、检测和问诊。</span>
+            </div>
+            <div id="client-detail-body" hidden></div>
+          </article>
+        </div>
+      </div>
+
+      <div id="pane-consult" class="doc-consult-pane" hidden>
+        <div class="doc-tabs doc-sub-tabs">
+          <button type="button" class="doc-tab is-active" data-filter="pending">待回复</button>
+          <button type="button" class="doc-tab" data-filter="answered">已回复</button>
+        </div>
+        <div class="doc-split">
+          <aside class="doc-list-pane">
+            <div id="consult-list" class="doc-list"></div>
+            <p id="list-empty" class="doc-empty" hidden>暂无待回复的咨询</p>
+            <p id="list-loading" class="doc-empty">加载中…</p>
+          </aside>
+          <article class="doc-detail-pane" id="detail-pane">
+            <div id="detail-empty" class="doc-detail-empty">
+              <p>从左侧选择一条咨询</p>
+              <span>诊所客户能看到全家猫档案；平台问诊仍只看这一条。</span>
+            </div>
+            <div id="detail-body" hidden></div>
+          </article>
+        </div>
       </div>
     </section>
   </main>
@@ -138,6 +175,6 @@
 
   <div id="toast" class="doc-toast" hidden></div>
 
-  <script src="doctor.js?v=1"></script>
+  <script src="doctor.js?v=2"></script>
 </body>
 </html>

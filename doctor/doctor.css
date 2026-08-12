@@ -204,6 +204,93 @@
   border-bottom: 1px solid var(--border);
 }
 
+.doc-referral {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.2rem;
+  background: rgba(232, 240, 251, 0.85);
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-referral-label {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  font-weight: 650;
+}
+
+.doc-referral strong {
+  display: block;
+  font-size: 1.35rem;
+  letter-spacing: 0.12em;
+  color: var(--primary-deepest);
+}
+
+.doc-referral-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.doc-main-tabs {
+  background: rgba(255, 249, 240, 0.95);
+}
+
+.doc-sub-tabs {
+  padding-top: 0.55rem;
+  background: transparent;
+  border-bottom: none;
+}
+
+.doc-clients-toolbar {
+  padding: 0.75rem 0.85rem 0.2rem;
+}
+
+.doc-clients-toolbar input {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+}
+
+.client-meta {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.cat-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.65rem;
+}
+
+.cat-mini-card {
+  text-align: left;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  border-radius: 14px;
+  padding: 0.7rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cat-mini-card strong {
+  display: block;
+  color: var(--primary-deepest);
+}
+
+.alias-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.alias-row input {
+  flex: 1;
+}
+
 .doc-tabs {
   display: flex;
   gap: 0.5rem;
