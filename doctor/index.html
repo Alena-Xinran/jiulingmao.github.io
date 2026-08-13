@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="canonical" href="https://www.jiulingmao.com/doctor/">
   <link rel="stylesheet" href="../styles.css?v=18">
-  <link rel="stylesheet" href="doctor.css?v=2">
+  <link rel="stylesheet" href="doctor.css?v=4">
   <link rel="icon" href="../logo.png" type="image/png">
 </head>
 <body class="doctor-page">
@@ -57,9 +57,13 @@
     <section id="view-work" class="doc-work" hidden>
       <header class="doc-toolbar">
         <div class="doc-who">
-          <img id="toolbar-avatar" class="doc-who-avatar" alt="">
+          <button type="button" class="doc-who-avatar-btn" id="btn-toolbar-avatar" title="更换头像">
+            <img id="toolbar-avatar" class="doc-who-avatar" alt="">
+            <span class="doc-who-camera" aria-hidden="true">📷</span>
+          </button>
           <div class="doc-who-text">
             <strong id="toolbar-name">医生</strong>
+            <span id="toolbar-place">未填写城市和医院</span>
             <span id="toolbar-title">未填写专业</span>
           </div>
         </div>
@@ -103,7 +107,7 @@
           <article class="doc-detail-pane" id="client-detail-pane">
             <div class="doc-detail-empty" id="client-detail-empty">
               <p>从左侧选择一位客户</p>
-              <span>可看到这位家长名下全部猫咪、检测和问诊。</span>
+              <span>点开一只猫，按面部 / 便便 / 呕吐 / 牙齿 / 伤口分板块看检测。</span>
             </div>
             <div id="client-detail-body" hidden></div>
           </article>
@@ -148,11 +152,19 @@
       </div>
       <label class="doc-field">
         <span>姓名</span>
-        <input id="profile-name" type="text" maxlength="20" placeholder="如：陈医生">
+        <input id="profile-name" type="text" maxlength="20" placeholder="如：李医生">
+      </label>
+      <label class="doc-field">
+        <span>城市</span>
+        <input id="profile-city" type="text" maxlength="40" placeholder="如：上海">
+      </label>
+      <label class="doc-field">
+        <span>宠物医院</span>
+        <input id="profile-hospital" type="text" maxlength="60" placeholder="如：爱心宠物医院">
       </label>
       <label class="doc-field">
         <span>专业</span>
-        <input id="profile-title" type="text" maxlength="40" placeholder="如：猫科行为学">
+        <input id="profile-title" type="text" maxlength="40" placeholder="如：猫内科">
       </label>
       <div class="doc-field">
         <span>性别</span>
@@ -175,6 +187,6 @@
 
   <div id="toast" class="doc-toast" hidden></div>
 
-  <script src="doctor.js?v=2"></script>
+  <script src="doctor.js?v=4"></script>
 </body>
 </html>

@@ -67,9 +67,14 @@
           var d = data && data.doctor;
           if (!d) return;
           document.getElementById("title").textContent = (d.name || "医生") + " 推荐你使用九龄猫";
-          if (d.title) {
-            document.getElementById("lead").textContent = d.title + " · 居家检测会回到这位医生的工作台，方便随访。";
-          }
+          var city = (d.city || "").trim();
+          var hospital = (d.hospital || "").trim();
+          var place = [city, hospital].filter(Boolean).join(" · ");
+          var bits = [];
+          if (place) bits.push(place + "的" + (d.name || "医生"));
+          if (d.title) bits.push(d.title);
+          bits.push("居家检测会回到这位医生的工作台，方便随访。");
+          document.getElementById("lead").textContent = bits.join(" · ");
         })
         .catch(function () {});
     })();

@@ -56,12 +56,14 @@
     reply: Object.assign({}, EMPTY_REPLY),
     submitting: false,
     quickReplies: [],
-    profile: { name: "", title: "", gender: "female", avatar_url: "" },
+    profile: { name: "", title: "", gender: "female", avatar_url: "", city: "", hospital: "" },
     refreshTimer: null,
     clients: [],
     clientCurrent: null,
     clientCat: null,
-    clientSearch: ""
+    clientCatModule: "",
+    clientSearch: "",
+    historyModule: ""
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -131,6 +133,14 @@
     return cat.avatar_url ? uploadUrl(cat.avatar_url) : avatarFallback(cat.name, "cat");
   }
 
+  var FIVE_MODULES = [
+    { key: "fgs", label: "面部测痛" },
+    { key: "stool", label: "便便" },
+    { key: "vomit", label: "呕吐物" },
+    { key: "teeth", label: "牙齿" },
+    { key: "postop", label: "伤口" }
+  ];
+
   function moduleLabel(module) {
     if (module === "stool") return "便便";
     if (module === "vomit") return "呕吐物";
@@ -156,6 +166,40 @@
     if (row.module === "teeth") return "GI " + (row.fecal_score || 0) + "/3 · CI " + (row.body_score || 0) + "/3";
     if (row.module === "postop") return "伤口 " + (row.pain_level || "");
     return "呕吐物记录";
+  }
+
+  function groupByModule(rows) {
+    var map = {};
+    FIVE_MODULES.forEach(function (m) { map[m.key] = []; });
+    (rows || []).forEach(function (r) {
+      var k = r.module || "fgs";
+      if (!map[k]) map[k] = [];
+      map[k].push(r);
+    });
+    return map;
+  }
+
+  function moduleCountMap(rows) {
+    var grouped = groupByModule(rows);
+    var out = {};
+    FIVE_MODULES.forEach(function (m) {
+      out[m.key] = (grouped[m.key] || []).length;
+    });
+    return out;
+  }
+
+  function lastSummary(last) {
+    if (!last) return "还没测过";
+    return historySummary(Object.assign({ module: last.module }, last));
+  }
+
+  function scanRecordCardHtml(s) {
+    var img = s.image_path
+      ? '<img class="history-thumb" src="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '" alt="" data-preview="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '">'
+      : '<div class="history-thumb"></div>';
+    return '<div class="history-card"><div class="history-card-head">' + img +
+      '<div class="history-meta"><span class="history-summary">' + escapeHtml(historySummary(s)) + "</span>" +
+      '<span class="history-date">' + escapeHtml(formatTime(s.created_at)) + "</span></div></div></div>";
   }
 
   function formatTime(ts) {
@@ -378,6 +422,7 @@
     api("/api/v1/doctor/clients/" + encodeURIComponent(userId)).then(function (res) {
       state.clientCurrent = res;
       state.clientCat = null;
+      state.clientCatModule = "";
       renderClients();
       renderClientDetail();
     }).catch(function (err) {
@@ -413,45 +458,69 @@
       '<div class="alias-row"><input id="client-alias" maxlength="20" value="' + escapeHtml(u.alias || "") +
       '" placeholder="如：王女士 / 小白家长">' +
       '<button type="button" class="doc-btn-ghost" id="btn-save-alias">保存</button></div></section>';
-    html += '<section class="detail-section"><h3>猫咪</h3>';
+    html += '<section class="detail-section"><h3>每只猫的五大检测</h3>';
     if (!cats.length) {
       html += '<p class="doc-empty">这位家长还没建猫咪档案</p>';
     } else {
-      html += '<div class="cat-mini-grid">' + cats.map(function (cat) {
-        return '<button type="button" class="cat-mini-card" data-cat="' + escapeHtml(cat.id) + '">' +
+      html += cats.map(function (cat) {
+        var selected = state.clientCat && state.clientCat.cat && state.clientCat.cat.id === cat.id;
+        var meta = [cat.breed || "品种未填", cat.gender === "male" ? "公" : cat.gender === "female" ? "母" : "", cat.neutered ? "已绝育" : "未绝育"].filter(Boolean).join(" · ");
+        var tiles = FIVE_MODULES.map(function (m) {
+          var st = (cat.modules && cat.modules[m.key]) || { count: 0, last: null };
+          var count = Number(st.count || 0);
+          var focus = selected && state.clientCatModule === m.key;
+          return '<button type="button" class="module-tile' + (focus ? " is-active" : "") + (count ? "" : " is-empty") +
+            '" data-cat="' + escapeHtml(cat.id) + '" data-module="' + m.key + '">' +
+            "<strong>" + m.label + "</strong>" +
+            "<span>" + (count ? count + " 条" : "未测") + "</span>" +
+            "<em>" + escapeHtml(count ? lastSummary(st.last) : "还没测过") + "</em></button>";
+        }).join("");
+        var panels = "";
+        if (selected) {
+          var grouped = groupByModule(state.clientCat.scans || []);
+          var focusMod = state.clientCatModule || "";
+          var list = grouped[focusMod] || [];
+          var label = (FIVE_MODULES.find(function (m) { return m.key === focusMod; }) || {}).label || "检测";
+          panels = '<div class="module-panel">' +
+            "<h4>" + escapeHtml((state.clientCat.cat && state.clientCat.cat.name) || cat.name) + " · " + label +
+            " · " + list.length + " 条</h4>";
+          if (cat.medical_history) {
+            panels += '<div class="detail-text">病史：' + escapeHtml(cat.medical_history) + "</div>";
+          }
+          if (!list.length) {
+            panels += '<p class="doc-empty">这只猫还没有' + label + "检测</p>";
+          } else {
+            panels += list.map(scanRecordCardHtml).join("");
+          }
+          panels += "</div>";
+        }
+        return '<article class="cat-board' + (selected ? " is-open" : "") + '">' +
+          '<button type="button" class="cat-board-head" data-cat="' + escapeHtml(cat.id) + '">' +
           "<strong>" + escapeHtml(cat.name) + "</strong>" +
-          '<span class="client-meta">' + escapeHtml([cat.breed || "品种未填", cat.gender === "male" ? "公" : cat.gender === "female" ? "母" : "", cat.neutered ? "已绝育" : "未绝育"].filter(Boolean).join(" · ")) + "</span>" +
-          '<span class="client-meta">' + (cat.scan_count ? cat.scan_count + " 条检测" : "还没检测") + "</span></button>";
-      }).join("") + "</div>";
+          '<span class="client-meta">' + escapeHtml(meta) + "</span></button>" +
+          '<div class="module-tiles">' + tiles + "</div>" + panels + "</article>";
+      }).join("");
     }
     html += "</section>";
-    if (state.clientCat) {
-      var cat = state.clientCat.cat || {};
-      var scans = state.clientCat.scans || [];
-      html += '<section class="detail-section"><h3>' + escapeHtml(cat.name) + " 的检测</h3>";
-      if (cat.medical_history) {
-        html += '<div class="detail-text">病史：' + escapeHtml(cat.medical_history) + "</div>";
-      }
-      if (!scans.length) {
-        html += '<p class="doc-empty">这只猫还没有检测记录</p>';
-      } else {
-        html += scans.map(function (s) {
-          return '<div class="history-card"><div class="history-card-head">' +
-            (s.image_path ? '<img class="history-thumb" src="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '" alt="" data-preview="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '">' : '<div class="history-thumb"></div>') +
-            '<div class="history-meta"><span class="doc-module-tag">' + escapeHtml(moduleLabel(s.module)) + "</span>" +
-            '<span class="history-summary">' + escapeHtml(historySummary(s)) + "</span>" +
-            '<span class="history-date">' + escapeHtml(formatTime(s.created_at)) + "</span></div></div></div>";
-        }).join("");
-      }
-      html += "</section>";
-    }
     var consults = state.clientCurrent.consultations || [];
     if (consults.length) {
-      html += '<section class="detail-section"><h3>问诊记录</h3>' + consults.map(function (c) {
-        return '<div class="ctx-item"><span class="ctx-item-label">' + escapeHtml(c.status === "pending" ? "待回复" : "已回复") +
-          "</span><span class=\"ctx-item-value\">" + escapeHtml((c.cat_name || "") + " · " + moduleLabel(c.module) + " · " + formatTime(c.created_at)) +
-          "</span></div>";
-      }).join("") + "</section>";
+      html += '<section class="detail-section"><h3>问诊记录</h3>';
+      var byCat = {};
+      consults.forEach(function (c) {
+        var name = c.cat_name || "未归档";
+        if (!byCat[name]) byCat[name] = [];
+        byCat[name].push(c);
+      });
+      Object.keys(byCat).forEach(function (name) {
+        html += '<div class="consult-cat-group"><div class="consult-cat-label">' + escapeHtml(name) + "</div>";
+        html += byCat[name].map(function (c) {
+          return '<div class="ctx-item"><span class="ctx-item-label">' + escapeHtml(c.status === "pending" ? "待回复" : "已回复") +
+            "</span><span class=\"ctx-item-value\">" + escapeHtml(moduleLabel(c.module) + " · " + formatTime(c.created_at)) +
+            "</span></div>";
+        }).join("");
+        html += "</div>";
+      });
+      html += "</section>";
     }
     html += "</div>";
     body.innerHTML = html;
@@ -476,13 +545,30 @@
     showSection(state.section || "clients");
   }
 
+  function doctorIntro(info) {
+    info = info || {};
+    var name = String(info.name || "医生").trim() || "医生";
+    var city = String(info.city || "").trim();
+    var hospital = String(info.hospital || "").trim();
+    var title = String(info.title || "").trim();
+    var place = [city, hospital].filter(Boolean).join(" · ");
+    return {
+      headline: place ? (place + "的" + name) : name,
+      place: place || "未填写城市和医院",
+      specialty: title || "未填写专业",
+      name: name
+    };
+  }
+
   function renderToolbar() {
     var info = state.doctor || {};
-    $("toolbar-name").textContent = info.name || "医生";
-    $("toolbar-title").textContent = info.title || "未填写专业";
+    var intro = doctorIntro(info);
+    $("toolbar-name").textContent = intro.headline;
+    $("toolbar-place").textContent = intro.place;
+    $("toolbar-title").textContent = intro.specialty;
     var img = $("toolbar-avatar");
     img.src = doctorAvatar(info);
-    img.alt = info.name || "医生";
+    img.alt = intro.name;
     var code = info.referral_code || "";
     $("referral-bar").hidden = !code;
     $("referral-code").textContent = code || "————";
@@ -673,50 +759,61 @@
         ctxListHtml(rec.catContextItems) + "</section>";
     }
 
-    html += '<section class="detail-section"><div class="history-head"><h3>这只猫的其他检测</h3>' +
-      (state.history.length ? '<span class="history-count">共 ' + state.history.length + " 条</span>" : "") +
-      "</div>";
+    html += '<section class="detail-section"><div class="history-head"><h3>这只猫的五大检测</h3></div>';
     if (state.historyLoading) {
       html += '<p class="doc-empty">正在加载...</p>';
-    } else if (!state.history.length) {
-      html += '<p class="doc-empty">这只猫没有其他检测记录</p>';
     } else {
-      html += '<div class="history-list">' + state.history.map(function (item) {
-        var open = !!state.historyOpen[item.id];
-        var cls = "history-card" + (item.is_current ? " is-current" : "") + (open ? " is-open" : "");
-        var inner = '<button type="button" class="history-card-head" data-toggle-history="' + escapeHtml(item.id) + '">' +
-          (item.imageUrl
-            ? '<img class="history-thumb" src="' + escapeHtml(item.imageUrl) + '" alt="" data-preview="' + escapeHtml(item.imageUrl) + '">'
-            : '<div class="history-thumb"></div>') +
-          '<div class="history-meta"><div class="history-meta-row">' +
-          '<span class="doc-module-tag">' + escapeHtml(item.moduleLabel) + "</span>" +
-          (item.is_current ? '<span class="history-current-tag">本次</span>' : "") +
-          '</div><span class="history-summary">' + escapeHtml(item.summary) + "</span>" +
-          '<span class="history-date">' + escapeHtml(item.dateText) + "</span></div>" +
-          '<span class="history-arrow">›</span></button>';
-        if (open) {
-          inner += '<div class="history-detail">';
-          if (item.module === "fgs") {
-            inner += '<div class="history-dim-grid">' + FGS_DIMS.map(function (pair) {
-              return '<div class="history-dim"><span>' + pair[1] + "</span><strong>" +
-                escapeHtml(item[pair[0]] || 0) + "/2</strong></div>";
-            }).join("") + "</div>";
-          }
-          if (item.diagnosis) {
-            inner += '<div><div class="answered-label">AI 初判</div><div class="answered-text">' +
-              escapeHtml(item.diagnosis) + "</div></div>";
-          }
-          if (item.advice) {
-            inner += '<div><div class="answered-label">AI 建议</div><div class="answered-text">' +
-              escapeHtml(item.advice) + "</div></div>";
-          }
-          if (item.catContextItems && item.catContextItems.length) {
-            inner += "<div><div class=\"answered-label\">用户填写的情况</div>" + ctxListHtml(item.catContextItems) + "</div>";
-          }
-          inner += "</div>";
-        }
-        return '<div class="' + cls + '">' + inner + "</div>";
+      var counts = moduleCountMap(state.history);
+      var histMod = state.historyModule || (scan.module || "fgs");
+      html += '<div class="module-tiles module-tiles-compact">' + FIVE_MODULES.map(function (m) {
+        var n = counts[m.key] || 0;
+        return '<button type="button" class="module-tile' + (histMod === m.key ? " is-active" : "") + (n ? "" : " is-empty") +
+          '" data-history-module="' + m.key + '"><strong>' + m.label + "</strong><span>" +
+          (n ? n + " 条" : "未测") + "</span></button>";
       }).join("") + "</div>";
+      var histList = groupByModule(state.history)[histMod] || [];
+      var histLabel = (FIVE_MODULES.find(function (m) { return m.key === histMod; }) || {}).label || "检测";
+      html += '<div class="module-panel"><h4>' + histLabel + " · " + histList.length + " 条</h4>";
+      if (!histList.length) {
+        html += '<p class="doc-empty">这只猫还没有' + histLabel + "记录</p>";
+      } else {
+        html += '<div class="history-list">' + histList.map(function (item) {
+          var open = !!state.historyOpen[item.id];
+          var cls = "history-card" + (item.is_current ? " is-current" : "") + (open ? " is-open" : "");
+          var inner = '<button type="button" class="history-card-head" data-toggle-history="' + escapeHtml(item.id) + '">' +
+            (item.imageUrl
+              ? '<img class="history-thumb" src="' + escapeHtml(item.imageUrl) + '" alt="" data-preview="' + escapeHtml(item.imageUrl) + '">'
+              : '<div class="history-thumb"></div>') +
+            '<div class="history-meta"><div class="history-meta-row">' +
+            (item.is_current ? '<span class="history-current-tag">本次</span>' : "") +
+            '</div><span class="history-summary">' + escapeHtml(item.summary) + "</span>" +
+            '<span class="history-date">' + escapeHtml(item.dateText) + "</span></div>" +
+            '<span class="history-arrow">›</span></button>';
+          if (open) {
+            inner += '<div class="history-detail">';
+            if (item.module === "fgs") {
+              inner += '<div class="history-dim-grid">' + FGS_DIMS.map(function (pair) {
+                return '<div class="history-dim"><span>' + pair[1] + "</span><strong>" +
+                  escapeHtml(item[pair[0]] || 0) + "/2</strong></div>";
+              }).join("") + "</div>";
+            }
+            if (item.diagnosis) {
+              inner += '<div><div class="answered-label">AI 初判</div><div class="answered-text">' +
+                escapeHtml(item.diagnosis) + "</div></div>";
+            }
+            if (item.advice) {
+              inner += '<div><div class="answered-label">AI 建议</div><div class="answered-text">' +
+                escapeHtml(item.advice) + "</div></div>";
+            }
+            if (item.catContextItems && item.catContextItems.length) {
+              inner += "<div><div class=\"answered-label\">用户填写的情况</div>" + ctxListHtml(item.catContextItems) + "</div>";
+            }
+            inner += "</div>";
+          }
+          return '<div class="' + cls + '">' + inner + "</div>";
+        }).join("") + "</div>";
+      }
+      html += "</div>";
     }
     html += "</section>";
 
@@ -799,6 +896,7 @@
     state.reply = Object.assign({}, EMPTY_REPLY);
     state.history = [];
     state.historyOpen = {};
+    state.historyModule = (rec.scan && rec.scan.module) || "fgs";
     renderList();
     renderDetail();
     loadHistory(rec.id);
@@ -809,6 +907,7 @@
     state.reply = Object.assign({}, EMPTY_REPLY);
     state.history = [];
     state.historyOpen = {};
+    state.historyModule = "";
     renderList();
     renderDetail();
   }
@@ -902,9 +1001,13 @@
       name: info.name || "",
       title: info.title || "",
       gender: info.gender || "female",
-      avatar_url: info.avatar_url ? uploadUrl(info.avatar_url) : ""
+      avatar_url: info.avatar_url ? uploadUrl(info.avatar_url) : "",
+      city: info.city || "",
+      hospital: info.hospital || ""
     };
     $("profile-name").value = state.profile.name;
+    $("profile-city").value = state.profile.city;
+    $("profile-hospital").value = state.profile.hospital;
     $("profile-title").value = state.profile.title;
     $("profile-avatar").src = state.profile.avatar_url || avatarFallback(state.profile.name, "doctor");
     document.querySelectorAll("#profile-gender .doc-chip").forEach(function (btn) {
@@ -922,6 +1025,8 @@
     if (!name) return toast("姓名不能为空");
     var payload = {
       name: name,
+      city: ($("profile-city").value || "").trim(),
+      hospital: ($("profile-hospital").value || "").trim(),
       title: ($("profile-title").value || "").trim(),
       gender: state.profile.gender || "female",
       avatar_url: relativeUploadPath(state.profile.avatar_url || "")
@@ -1055,6 +1160,12 @@
         renderDetail();
         return;
       }
+      var histMod = e.target.closest("[data-history-module]");
+      if (histMod) {
+        state.historyModule = histMod.getAttribute("data-history-module") || "fgs";
+        renderDetail();
+        return;
+      }
       var hist = e.target.closest("[data-toggle-history]");
       if (hist) {
         var hid = hist.getAttribute("data-toggle-history");
@@ -1099,6 +1210,7 @@
       if (e.target.id === "btn-close-client") {
         state.clientCurrent = null;
         state.clientCat = null;
+        state.clientCatModule = "";
         renderClients();
         renderClientDetail();
         return;
@@ -1118,9 +1230,36 @@
       var catBtn = e.target.closest("[data-cat]");
       if (catBtn && state.clientCurrent && state.clientCurrent.user) {
         var uid2 = state.clientCurrent.user.id;
-        api("/api/v1/doctor/clients/" + encodeURIComponent(uid2) + "/cats/" + encodeURIComponent(catBtn.getAttribute("data-cat")))
+        var catId = catBtn.getAttribute("data-cat");
+        var wantMod = catBtn.getAttribute("data-module") || "";
+        if (state.clientCat && state.clientCat.cat && state.clientCat.cat.id === catId) {
+          if (wantMod) state.clientCatModule = wantMod;
+          renderClientDetail();
+          return;
+        }
+        api("/api/v1/doctor/clients/" + encodeURIComponent(uid2) + "/cats/" + encodeURIComponent(catId))
           .then(function (res) {
             state.clientCat = res;
+            if (wantMod) {
+              state.clientCatModule = wantMod;
+            } else {
+              var grouped = groupByModule((res && res.scans) || []);
+              var pick = "fgs";
+              FIVE_MODULES.forEach(function (m) {
+                if ((grouped[m.key] || []).length && pick === "fgs" && !(grouped.fgs || []).length) pick = m.key;
+                if ((grouped[m.key] || []).length) pick = m.key;
+              });
+              // prefer module with most recent scan
+              var latest = 0;
+              FIVE_MODULES.forEach(function (m) {
+                var list = grouped[m.key] || [];
+                if (list[0] && (list[0].created_at || 0) >= latest) {
+                  latest = list[0].created_at || 0;
+                  pick = m.key;
+                }
+              });
+              state.clientCatModule = pick;
+            }
             renderClientDetail();
           })
           .catch(function (err) {
@@ -1129,6 +1268,7 @@
       }
     });
     $("btn-edit-profile").addEventListener("click", openProfile);
+    $("btn-toolbar-avatar").addEventListener("click", openProfile);
     $("btn-logout").addEventListener("click", function () {
       if (window.confirm("退出登录？会返回登录页")) {
         clearSession();
