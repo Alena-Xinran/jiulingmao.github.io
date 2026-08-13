@@ -8,7 +8,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="canonical" href="https://www.jiulingmao.com/doctor/">
   <link rel="stylesheet" href="../styles.css?v=18">
-  <link rel="stylesheet" href="doctor.css?v=5">
+  <link rel="stylesheet" href="doctor.css?v=6">
   <link rel="icon" href="../logo.png" type="image/png">
 </head>
 <body class="doctor-page">
@@ -115,17 +115,19 @@
       </div>
 
       <div id="pane-consult" class="doc-consult-pane" hidden>
-        <div class="doc-tabs doc-sub-tabs">
+        <div id="consult-platform-tabs" class="doc-tabs doc-sub-tabs" hidden>
           <button type="button" class="doc-tab is-active" data-filter="pending">待回复</button>
           <button type="button" class="doc-tab" data-filter="answered">已回复</button>
         </div>
         <div class="doc-split">
           <aside class="doc-list-pane">
+            <div id="inbox-cats" class="doc-list" hidden></div>
             <div id="consult-list" class="doc-list"></div>
             <p id="list-empty" class="doc-empty" hidden>暂无待回复的咨询</p>
             <p id="list-loading" class="doc-empty">加载中…</p>
           </aside>
           <article class="doc-detail-pane" id="detail-pane">
+            <div id="inbox-board" hidden></div>
             <div id="detail-empty" class="doc-detail-empty">
               <p>从左侧选择一条咨询</p>
               <span>诊所客户能看到全家猫档案；平台问诊仍只看这一条。</span>
@@ -187,6 +189,6 @@
 
   <div id="toast" class="doc-toast" hidden></div>
 
-  <script src="doctor.js?v=5"></script>
+  <script src="doctor.js?v=6"></script>
 </body>
 </html>

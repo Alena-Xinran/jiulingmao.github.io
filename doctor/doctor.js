@@ -64,7 +64,12 @@
     clientCatModule: "",
     clientSearch: "",
     clientScanOpen: {},
-    historyModule: ""
+    historyModule: "",
+    aliasEditing: false,
+    inboxBuckets: [],
+    inboxBucket: "",
+    inboxLoading: false,
+    fromInbox: false
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -436,8 +441,25 @@
     });
     $("pane-clients").hidden = section !== "clients";
     $("pane-consult").hidden = section === "clients";
+    var mine = section === "consult-mine";
+    $("consult-platform-tabs").hidden = section !== "consult-platform";
+    $("inbox-cats").hidden = !mine;
+    $("consult-list").hidden = mine;
+    if (!mine) {
+      $("inbox-board").hidden = true;
+      var emptyP = $("detail-empty");
+      if (emptyP) {
+        var p = emptyP.querySelector("p");
+        var span = emptyP.querySelector("span");
+        if (p) p.textContent = "从左侧选择一条咨询";
+        if (span) span.textContent = "诊所客户能看到全家猫档案；平台问诊仍只看这一条。";
+      }
+    }
     if (section === "clients") {
       loadClients();
+    } else if (mine) {
+      closeDetail();
+      loadInbox();
     } else {
       closeDetail();
       loadList();
@@ -457,6 +479,138 @@
       if (handleAuthError(err)) return;
       toast(networkMessage(err, "加载客户失败"));
     });
+  }
+
+  function loadInbox() {
+    state.inboxLoading = true;
+    $("list-loading").hidden = false;
+    $("list-empty").hidden = true;
+    $("inbox-board").hidden = true;
+    return api("/api/v1/doctor/inbox").then(function (res) {
+      state.inboxBuckets = (res && res.buckets) || [];
+      state.pendingCount = Number((res && res.pending_count) || 0);
+      state.inboxLoading = false;
+      $("list-loading").hidden = true;
+      if (!state.inboxBucket && state.inboxBuckets.length) {
+        var pick = state.inboxBuckets.find(function (b) { return b.owner_count > 0 && b.key !== "ok"; })
+          || state.inboxBuckets.find(function (b) { return b.owner_count > 0; });
+        state.inboxBucket = pick ? pick.key : (state.inboxBuckets[0] && state.inboxBuckets[0].key) || "";
+      }
+      renderInbox();
+    }).catch(function (err) {
+      state.inboxLoading = false;
+      $("list-loading").hidden = true;
+      if (handleAuthError(err)) return;
+      toast(networkMessage(err, "加载问诊失败"));
+    });
+  }
+
+  function currentInboxBucket() {
+    return (state.inboxBuckets || []).find(function (b) { return b.key === state.inboxBucket; }) || null;
+  }
+
+  function renderInbox() {
+    var countEl = $("pending-count");
+    if (state.pendingCount > 0) {
+      countEl.hidden = false;
+      countEl.textContent = String(state.pendingCount);
+    } else {
+      countEl.hidden = true;
+    }
+    var list = $("inbox-cats");
+    list.innerHTML = (state.inboxBuckets || []).map(function (b) {
+      var active = state.inboxBucket === b.key ? " is-active" : "";
+      var emptyCls = (b.owner_count ? "" : " is-empty");
+      return '<button type="button" class="inbox-cat' + active + emptyCls + '" data-inbox="' + escapeHtml(b.key) + '">' +
+        '<span class="inbox-dot is-' + escapeHtml(b.color) + '"></span>' +
+        '<span class="inbox-cat-text"><strong>' + escapeHtml(String(b.owner_count || 0)) + " 位主人</strong>" +
+        "<span>" + escapeHtml(b.sub || "") + "</span></span>" +
+        '<span class="inbox-cat-action">' + escapeHtml(b.action || "") + "</span></button>";
+    }).join("");
+    $("list-empty").hidden = true;
+    if (state.current) return;
+    renderInboxBoard();
+  }
+
+  function evidenceCardHtml(card) {
+    var photos = (card.photos || []).slice(0, 3);
+    var cols = Math.min(3, Math.max(1, photos.length));
+    var photoHtml = photos.length
+      ? '<div class="evidence-photos" style="grid-template-columns:repeat(' + cols + ',1fr)">' + photos.map(function (p) {
+          var src = uploadUrl(p.path);
+          return '<div class="evidence-photo" data-preview="' + escapeHtml(src) + '"><img src="' + escapeHtml(src) + '" alt="" data-preview="' + escapeHtml(src) + '">' +
+            '<span class="evidence-photo-when">' + escapeHtml(p.when || "") + "</span></div>";
+        }).join("") + "</div>"
+      : "";
+    var owner = card.owner_alias || card.owner_nickname || "";
+    return '<button type="button" class="evidence-card" data-inbox-card="' + escapeHtml(card.id) + '">' +
+      '<div class="evidence-head">' + escapeHtml((card.cat_name || "猫咪") + " · " + (card.module_label || "检测记录")) + "</div>" +
+      photoHtml +
+      '<div class="evidence-body">' +
+      '<span class="evidence-badge is-' + escapeHtml(card.tier || "") + '">' + escapeHtml(card.badge || "") + "</span>" +
+      '<div class="evidence-summary">' + escapeHtml(card.summary || "") + "</div>" +
+      (owner ? '<div class="evidence-owner">主人 ' + escapeHtml(owner) + "</div>" : "") +
+      "</div></button>";
+  }
+
+  function renderInboxBoard() {
+    var board = $("inbox-board");
+    var empty = $("detail-empty");
+    var body = $("detail-body");
+    var pane = $("detail-pane");
+    body.hidden = true;
+    var bucket = currentInboxBucket();
+    if (!bucket) {
+      board.hidden = true;
+      empty.hidden = false;
+      empty.querySelector("p").textContent = "从左侧选择一类情况";
+      empty.querySelector("span").textContent = "绿档不用回，红档已提示到院，黄档是主人专门问你的。";
+      pane.classList.remove("is-open");
+      $("list-empty").hidden = true;
+      return;
+    }
+    var cards = bucket.cards || [];
+    if (!cards.length) {
+      board.hidden = true;
+      empty.hidden = false;
+      empty.querySelector("p").textContent = "这一类暂时没有记录";
+      empty.querySelector("span").textContent = bucket.action || "";
+      pane.classList.remove("is-open");
+      return;
+    }
+    empty.hidden = true;
+    board.hidden = false;
+    board.innerHTML = '<div class="inbox-board">' + cards.map(evidenceCardHtml).join("") + "</div>";
+    pane.classList.add("is-open");
+    $("list-empty").hidden = true;
+  }
+
+  function openInboxCard(cardId) {
+    var bucket = currentInboxBucket();
+    if (!bucket) return;
+    var card = (bucket.cards || []).find(function (c) { return String(c.id) === String(cardId); });
+    if (!card) return;
+    if (card.consultation_id) {
+      state.fromInbox = true;
+      api("/api/v1/doctor/consultations/" + encodeURIComponent(card.consultation_id)).then(function (rec) {
+        state.current = decorateRecord(rec);
+        state.reply = Object.assign({}, EMPTY_REPLY);
+        state.history = [];
+        state.historyOpen = {};
+        state.historyModule = (rec.scan && rec.scan.module) || "fgs";
+        $("inbox-board").hidden = true;
+        renderDetail();
+        loadHistory(rec.id);
+      }).catch(function (err) {
+        if (handleAuthError(err)) return;
+        toast(networkMessage(err, "加载问诊失败"));
+      });
+      return;
+    }
+    if (card.user_id) {
+      showSection("clients");
+      openClient(card.user_id);
+    }
   }
 
   function renderClients() {
@@ -488,6 +642,7 @@
   }
 
   function openClient(userId) {
+    state.aliasEditing = false;
     api("/api/v1/doctor/clients/" + encodeURIComponent(userId)).then(function (res) {
       state.clientCurrent = res;
       state.clientCat = null;
@@ -515,18 +670,22 @@
     pane.classList.add("is-open");
     var u = state.clientCurrent.user || {};
     var cats = state.clientCurrent.cats || [];
+    var displayName = u.display_name || u.nickname || "用户";
+    var nameHtml = state.aliasEditing
+      ? '<input id="client-alias" class="alias-inline-input" maxlength="20" value="' +
+        escapeHtml(u.alias || u.nickname || "") + '" placeholder="备注名，只给你看">'
+      : '<div class="detail-cat-name" id="btn-edit-alias">' + escapeHtml(displayName) + "</div>" +
+        '<button type="button" class="alias-pencil" id="btn-edit-alias-icon" title="改备注名" aria-label="改备注名">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>';
     var html = '<div class="detail-close-bar"><strong>客户档案</strong>' +
       '<button type="button" class="doc-btn-ghost" id="btn-close-client">关闭</button></div>' +
       '<div class="doc-detail"><div class="detail-head">' +
-      '<img class="detail-cat-avatar" src="' + escapeHtml(u.avatar_url ? uploadUrl(u.avatar_url) : avatarFallback(u.display_name, "doctor")) + '" alt="">' +
-      "<div><div class=\"detail-cat-name\">" + escapeHtml(u.display_name || u.nickname || "用户") + "</div>" +
+      '<img class="detail-cat-avatar" src="' + escapeHtml(u.avatar_url ? uploadUrl(u.avatar_url) : avatarFallback(displayName, "doctor")) + '" alt="">' +
+      "<div><div class=\"detail-cat-name-row\">" + nameHtml + "</div>" +
       '<div class="detail-cat-meta">家长 ' + escapeHtml(u.nickname || "") +
       " · 名下 " + (state.clientCurrent.cat_count || 0) + " 只猫 · 绑定于 " + escapeHtml(formatTime(u.bound_at)) +
       "</div></div></div>";
-    html += '<section class="detail-section"><h3>给你看的备注名</h3>' +
-      '<div class="alias-row"><input id="client-alias" maxlength="20" value="' + escapeHtml(u.alias || "") +
-      '" placeholder="如：王女士 / 小白家长">' +
-      '<button type="button" class="doc-btn-ghost" id="btn-save-alias">保存</button></div></section>';
     html += '<section class="detail-section"><h3>每只猫的五大检测</h3>';
     if (!cats.length) {
       html += '<p class="doc-empty">这位家长还没建猫咪档案</p>';
@@ -593,6 +752,32 @@
     }
     html += "</div>";
     body.innerHTML = html;
+    if (state.aliasEditing) {
+      var input = $("client-alias");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+  }
+
+  function saveClientAlias(alias) {
+    var uid = state.clientCurrent && state.clientCurrent.user && state.clientCurrent.user.id;
+    if (!uid) return;
+    var next = String(alias || "").trim();
+    var cur = (state.clientCurrent.user.alias || "").trim();
+    state.aliasEditing = false;
+    if (next === cur) {
+      renderClientDetail();
+      return;
+    }
+    api("/api/v1/doctor/clients/" + encodeURIComponent(uid), "PATCH", { alias: next }).then(function () {
+      toast("备注已保存");
+      openClient(uid);
+    }).catch(function (err) {
+      toast(networkMessage(err, "保存失败"));
+      renderClientDetail();
+    });
   }
 
   function copyText(text, okMsg) {
@@ -775,14 +960,19 @@
     var body = $("detail-body");
     var pane = $("detail-pane");
     if (!state.current) {
-      empty.hidden = false;
       body.hidden = true;
+      if (state.section === "consult-mine") {
+        renderInboxBoard();
+        return;
+      }
+      empty.hidden = false;
       pane.classList.remove("is-open");
       return;
     }
     empty.hidden = true;
     body.hidden = false;
     pane.classList.add("is-open");
+    if ($("inbox-board")) $("inbox-board").hidden = true;
     var rec = state.current;
     var scan = rec.scan || {};
     var cat = rec.cat || {};
@@ -795,9 +985,10 @@
     if (age) meta.push(age);
     if (cat.weight) meta.push(cat.weight + " kg");
 
-    var html = '<div class="detail-close-bar">' +
-      "<strong>咨询详情</strong>" +
-      '<button type="button" class="doc-btn-ghost" id="btn-close-detail">关闭</button>' +
+    var html = '<div class="detail-close-bar' + (state.fromInbox ? " is-from-inbox" : "") + '">' +
+      "<strong>" + (state.fromInbox ? "问诊详情" : "咨询详情") + "</strong>" +
+      '<button type="button" class="doc-btn-ghost" id="btn-close-detail">' +
+      (state.fromInbox ? "返回记录" : "关闭") + "</button>" +
       "</div><div class=\"doc-detail\">";
 
     html += '<div class="detail-head">' +
@@ -960,6 +1151,12 @@
     state.history = [];
     state.historyOpen = {};
     state.historyModule = "";
+    if (state.section === "consult-mine") {
+      state.fromInbox = false;
+      renderInbox();
+      return;
+    }
+    state.fromInbox = false;
     renderList();
     renderDetail();
   }
@@ -1003,7 +1200,8 @@
         state.submitting = false;
         toast("回复已发送");
         closeDetail();
-        loadList();
+        if (state.section === "consult-mine") loadInbox();
+        else loadList();
       })
       .catch(function (err) {
         state.submitting = false;
@@ -1036,6 +1234,7 @@
     state.refreshTimer = setInterval(function () {
       if (document.hidden || $("view-work").hidden) return;
       if (state.section === "clients") loadClients();
+      else if (state.section === "consult-mine") loadInbox();
       else loadList();
     }, 45000);
   }
@@ -1181,6 +1380,28 @@
       openDetail(card.getAttribute("data-id"));
     });
 
+    $("inbox-cats").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-inbox]");
+      if (!btn) return;
+      state.inboxBucket = btn.getAttribute("data-inbox") || "";
+      state.current = null;
+      state.fromInbox = false;
+      renderInbox();
+    });
+
+    $("inbox-board").addEventListener("click", function (e) {
+      var preview = e.target.getAttribute("data-preview");
+      if (preview) {
+        e.preventDefault();
+        e.stopPropagation();
+        openLightbox(preview);
+        return;
+      }
+      var card = e.target.closest("[data-inbox-card]");
+      if (!card) return;
+      openInboxCard(card.getAttribute("data-inbox-card"));
+    });
+
     $("detail-body").addEventListener("click", function (e) {
       var preview = e.target.getAttribute("data-preview");
       if (preview) {
@@ -1235,6 +1456,7 @@
 
     $("btn-refresh").addEventListener("click", function () {
       if (state.section === "clients") loadClients();
+      else if (state.section === "consult-mine") loadInbox();
       else loadList();
     });
     $("btn-copy-code").addEventListener("click", function () {
@@ -1264,7 +1486,13 @@
         state.clientCat = null;
         state.clientCatModule = "";
         state.clientScanOpen = {};
+        state.aliasEditing = false;
         renderClients();
+        renderClientDetail();
+        return;
+      }
+      if (e.target.id === "btn-edit-alias" || e.target.closest("#btn-edit-alias-icon") || e.target.id === "btn-edit-alias-icon") {
+        state.aliasEditing = true;
         renderClientDetail();
         return;
       }
@@ -1273,18 +1501,6 @@
         var sid = clientScan.getAttribute("data-toggle-client-scan");
         state.clientScanOpen[sid] = !state.clientScanOpen[sid];
         renderClientDetail();
-        return;
-      }
-      if (e.target.id === "btn-save-alias") {
-        var uid = state.clientCurrent && state.clientCurrent.user && state.clientCurrent.user.id;
-        var alias = ($("client-alias") && $("client-alias").value) || "";
-        if (!uid) return;
-        api("/api/v1/doctor/clients/" + encodeURIComponent(uid), "PATCH", { alias: alias }).then(function () {
-          toast("备注已保存");
-          openClient(uid);
-        }).catch(function (err) {
-          toast(networkMessage(err, "保存失败"));
-        });
         return;
       }
       var catBtn = e.target.closest("[data-cat]");
@@ -1326,6 +1542,21 @@
             toast(networkMessage(err, "加载失败"));
           });
       }
+    });
+    $("client-detail-body").addEventListener("keydown", function (e) {
+      if (e.target.id !== "client-alias") return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveClientAlias(e.target.value);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        state.aliasEditing = false;
+        renderClientDetail();
+      }
+    });
+    $("client-detail-body").addEventListener("focusout", function (e) {
+      if (e.target.id !== "client-alias" || !state.aliasEditing) return;
+      saveClientAlias(e.target.value);
     });
     $("btn-edit-profile").addEventListener("click", openProfile);
     $("btn-toolbar-avatar").addEventListener("click", openProfile);
