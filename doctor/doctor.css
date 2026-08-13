@@ -119,6 +119,29 @@
   line-height: 1.5;
 }
 
+.doc-btn-demo {
+  width: 100%;
+  margin-top: 0.7rem;
+  padding: 0.72rem 1.2rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--primary-deep);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.doc-demo-banner {
+  margin: 0;
+  padding: 0.65rem 1.2rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: #6B4226;
+  background: #F8E4C4;
+  border-bottom: 1px solid var(--border);
+}
+
 .doc-work {
   background: var(--card);
   border: 2px solid rgba(255, 255, 255, 0.7);

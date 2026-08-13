@@ -40,6 +40,7 @@
     red: "🔴 建议今天就去"
   };
   var EMPTY_REPLY = { level: "", yellowDays: "2", action: "", note: "" };
+  var DEMO_NOW = Math.floor(Date.now() / 1000);
 
   var state = {
     doctor: null,
@@ -69,7 +70,8 @@
     inboxBuckets: [],
     inboxBucket: "",
     inboxLoading: false,
-    fromInbox: false
+    fromInbox: false,
+    demo: false
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -110,6 +112,148 @@
     if (p.charAt(0) === "/") return base + p;
     return base + "/uploads/" + p;
   }
+
+  function photoSrc(path) {
+    var p = String(path || "");
+    if (!p) return "";
+    if (/^(https?:|data:|\.\.?\/|\/)/i.test(p)) return p;
+    return uploadUrl(p);
+  }
+
+  function demoPhoto(file, when, hoursAgo) {
+    return {
+      path: "../" + file,
+      created_at: DEMO_NOW - Math.round((hoursAgo || 0) * 3600),
+      when: when
+    };
+  }
+
+  var DEMO = {
+    doctor: {
+      id: "demo-doc",
+      name: "李医生",
+      city: "上海",
+      hospital: "爱心宠物医院",
+      title: "猫内科",
+      gender: "female",
+      referral_code: "DEMO01",
+      referral_url: "https://www.jiulingmao.com/join/?code=DEMO01",
+      client_count: 3
+    },
+    clients: [
+      { user_id: "demo-lixinran", alias: "李欣然", nickname: "Xinran (Alena)", avatar_url: "", cat_count: 4, cat_names: "团团、邦邦、ab、a", pending_count: 1, bound_at: DEMO_NOW - 3600 },
+      { user_id: "demo-wang", alias: "王女士", nickname: "wang", avatar_url: "", cat_count: 1, cat_names: "年糕", pending_count: 0, bound_at: DEMO_NOW - 86400 * 12 },
+      { user_id: "demo-chen", alias: "陈妈妈", nickname: "小陈", avatar_url: "", cat_count: 1, cat_names: "咪咪", pending_count: 1, bound_at: DEMO_NOW - 86400 * 20 }
+    ]
+  };
+  DEMO.inbox = {
+    pending_count: 1,
+    buckets: [
+      {
+        key: "ok", color: "green", owner_count: 7, sub: "测完绿档，已安抚", action: "无需回复",
+        cards: [
+          {
+            id: "demo-tuantuan-stool", user_id: "demo-lixinran", owner_alias: "李欣然",
+            cat_name: "团团", module: "stool", module_label: "便便记录", tier: "good",
+            photos: [demoPhoto("bangbang/2026-7-12.png", "今天 09:12", 10), demoPhoto("bangbang/2026-6-25.png", "昨天", 30), demoPhoto("bangbang/2026-6-2.png", "5 天前", 120)],
+            badge: "今天 · 绿档 普瑞纳 3/7", summary: "近 30 天便便 8 次，间隔较稳 · 便便 2-3 分正常"
+          },
+          {
+            id: "demo-bangbang-fgs", user_id: "demo-lixinran", owner_alias: "李欣然",
+            cat_name: "邦邦", module: "fgs", module_label: "面部测痛记录", tier: "good",
+            photos: [demoPhoto("assets/scan1.png", "今天 08:02", 12), demoPhoto("assets/scan2.png", "3 天前", 72)],
+            badge: "今天 · 绿档 疼痛 3/18", summary: "近 30 天面部测痛 4 次，间隔在拉长"
+          },
+          {
+            id: "demo-ab-teeth", user_id: "demo-lixinran", owner_alias: "李欣然",
+            cat_name: "ab", module: "teeth", module_label: "牙齿记录", tier: "good",
+            photos: [demoPhoto("example/3.png", "2 天前", 50)],
+            badge: "2 天前 · 绿档 GI 0/3", summary: "近 30 天牙齿 1 次"
+          }
+        ]
+      },
+      {
+        key: "urgent", color: "red", owner_count: 1, sub: "疑似尿闭，已提示急诊", action: "直接到院",
+        cards: [
+          {
+            id: "demo-niangao-stool", user_id: "demo-wang", owner_alias: "王女士",
+            cat_name: "年糕", module: "stool", module_label: "便便记录", tier: "vet",
+            photos: [demoPhoto("example/1.png", "今天 07:40", 14), demoPhoto("example/2.png", "今天 06:15", 16)],
+            badge: "今天 · 红档 几乎无尿", summary: "近 24 小时反复蹲盆 · 已提示直接到院"
+          }
+        ]
+      },
+      {
+        key: "ask", color: "yellow", owner_count: 1, sub: "拿不准，留言问您", action: "明早回也行",
+        cards: [
+          {
+            id: "demo-ask-mimi", user_id: "demo-chen", owner_alias: "陈妈妈",
+            cat_name: "咪咪", module: "vomit", module_label: "呕吐记录",
+            consultation_id: "demo-ask-mimi", consultation_status: "pending", tier: "observe",
+            photos: [
+              demoPhoto("bangbang/2026-4-26.png", "今天 21:03", 1),
+              demoPhoto("bangbang/2026-4-20.png", "今天 08:40", 12),
+              demoPhoto("bangbang/2026-3.png", "3 天前", 72)
+            ],
+            badge: "今晚 · 黄档 毛球混食物",
+            summary: "近 30 天呕吐 3 次，间隔在拉长 · 便便 2-3 分正常"
+          }
+        ]
+      }
+    ]
+  };
+  DEMO.consult = {
+    id: "demo-ask-mimi",
+    user_id: "demo-chen",
+    scan_id: "demo-scan-mimi",
+    status: "pending",
+    created_at: DEMO_NOW - 3600,
+    owner_nickname: "小陈",
+    owner_alias: "陈妈妈",
+    cat_count: 1,
+    cat: { name: "咪咪", breed: "英短", gender: "female", birth_date: "2022-04-01", weight: 4.2, neutered: 1, avatar_url: "" },
+    scan: {
+      module: "vomit",
+      pain_level: "observe",
+      diagnosis: "更像毛球混食物，今晚这一口偏黄，先观察精神食欲。",
+      advice: "今晚先停零食，看会不会再吐。若 24 小时内再吐两次，或精神变差，建议就医。",
+      image_path: "../bangbang/2026-4-26.png",
+      fecal_score: 0,
+      total_score: 0,
+      cat_context: JSON.stringify({ appetite: "略差", water: "正常", vomit_event_type: "更像呕吐" })
+    }
+  };
+  DEMO.history = [
+    { id: "demo-scan-mimi", module: "vomit", created_at: DEMO_NOW - 3600, image_path: "../bangbang/2026-4-26.png", pain_level: "observe", diagnosis: "毛球混食物", is_current: true },
+    { id: "demo-scan-mimi-2", module: "vomit", created_at: DEMO_NOW - 12 * 3600, image_path: "../bangbang/2026-4-20.png", pain_level: "observe", diagnosis: "未消化猫粮" },
+    { id: "demo-scan-mimi-3", module: "vomit", created_at: DEMO_NOW - 72 * 3600, image_path: "../bangbang/2026-3.png", pain_level: "good", diagnosis: "少量毛团" },
+    { id: "demo-scan-stool", module: "stool", created_at: DEMO_NOW - 86400, image_path: "../example/4.png", fecal_score: 3, diagnosis: "成型偏软" }
+  ];
+  DEMO.clientDetails = {
+    "demo-lixinran": {
+      cat_count: 4,
+      user: { id: "demo-lixinran", nickname: "Xinran (Alena)", alias: "李欣然", display_name: "李欣然", avatar_url: "", bound_at: DEMO_NOW - 3600 },
+      cats: [
+        { id: "c-tuantuan", name: "团团", breed: "英短", gender: "female", neutered: 1, scan_count: 49, modules: { fgs: { count: 12, last: { module: "fgs", total_score: 3 } }, stool: { count: 20, last: { module: "stool", fecal_score: 3 } }, vomit: { count: 8, last: { module: "vomit" } }, teeth: { count: 6, last: { module: "teeth", fecal_score: 0 } }, postop: { count: 3, last: { module: "postop", pain_level: "良好" } } } },
+        { id: "c-bangbang", name: "邦邦", breed: "英短", gender: "male", neutered: 1, scan_count: 12, modules: { fgs: { count: 8, last: { module: "fgs", total_score: 4 } }, stool: { count: 2, last: { module: "stool", fecal_score: 3 } }, vomit: { count: 1, last: {} }, teeth: { count: 1, last: {} }, postop: { count: 0, last: null } } },
+        { id: "c-ab", name: "ab", breed: "", gender: "", neutered: 0, scan_count: 2, modules: { fgs: { count: 0, last: null }, stool: { count: 0, last: null }, vomit: { count: 0, last: null }, teeth: { count: 2, last: { module: "teeth" } }, postop: { count: 0, last: null } } },
+        { id: "c-a", name: "a", breed: "", gender: "", neutered: 0, scan_count: 1, modules: { fgs: { count: 1, last: { module: "fgs", total_score: 2 } }, stool: { count: 0, last: null }, vomit: { count: 0, last: null }, teeth: { count: 0, last: null }, postop: { count: 0, last: null } } }
+      ],
+      consultations: [{ id: "demo-ask-old", status: "pending", module: "teeth", created_at: DEMO_NOW - 86400 * 6, cat_name: "团团" }]
+    },
+    "demo-wang": {
+      cat_count: 1,
+      user: { id: "demo-wang", nickname: "wang", alias: "王女士", display_name: "王女士", avatar_url: "", bound_at: DEMO_NOW - 86400 * 12 },
+      cats: [{ id: "c-niangao", name: "年糕", breed: "美短", gender: "male", neutered: 1, scan_count: 6, modules: { fgs: { count: 1, last: {} }, stool: { count: 4, last: { module: "stool", fecal_score: 6 } }, vomit: { count: 1, last: {} }, teeth: { count: 0, last: null }, postop: { count: 0, last: null } } }],
+      consultations: []
+    },
+    "demo-chen": {
+      cat_count: 1,
+      user: { id: "demo-chen", nickname: "小陈", alias: "陈妈妈", display_name: "陈妈妈", avatar_url: "", bound_at: DEMO_NOW - 86400 * 20 },
+      cats: [{ id: "c-mimi", name: "咪咪", breed: "英短", gender: "female", neutered: 1, scan_count: 9, modules: { fgs: { count: 1, last: {} }, stool: { count: 3, last: { module: "stool", fecal_score: 3 } }, vomit: { count: 5, last: { module: "vomit" } }, teeth: { count: 0, last: null }, postop: { count: 0, last: null } } }],
+      consultations: [{ id: "demo-ask-mimi", status: "pending", module: "vomit", created_at: DEMO_NOW - 3600, cat_name: "咪咪" }]
+    }
+  };
 
   function relativeUploadPath(url) {
     var abs = String(url || "");
@@ -202,7 +346,7 @@
   function scanPhotoUrl(s) {
     s = s || {};
     if (s.imageUrl) return s.imageUrl;
-    if (s.image_path) return uploadUrl(String(s.image_path).split(",")[0]);
+    if (s.image_path) return photoSrc(String(s.image_path).split(",")[0]);
     return "";
   }
 
@@ -424,6 +568,8 @@
   function showLogin() {
     $("view-login").hidden = false;
     $("view-work").hidden = true;
+    var banner = $("demo-banner");
+    if (banner) banner.hidden = true;
     stopRefresh();
   }
 
@@ -467,6 +613,16 @@
   }
 
   function loadClients() {
+    if (state.demo) {
+      $("client-loading").hidden = true;
+      var q = (state.clientSearch || "").trim();
+      state.clients = DEMO.clients.filter(function (c) {
+        if (!q) return true;
+        return (c.alias + c.nickname + c.cat_names).indexOf(q) >= 0;
+      });
+      renderClients();
+      return;
+    }
     $("client-loading").hidden = false;
     $("client-empty").hidden = true;
     var q = state.clientSearch ? ("?q=" + encodeURIComponent(state.clientSearch)) : "";
@@ -482,6 +638,16 @@
   }
 
   function loadInbox() {
+    if (state.demo) {
+      state.inboxLoading = false;
+      $("list-loading").hidden = true;
+      $("list-empty").hidden = true;
+      state.inboxBuckets = DEMO.inbox.buckets;
+      state.pendingCount = DEMO.inbox.pending_count;
+      if (!state.inboxBucket) state.inboxBucket = "ask";
+      renderInbox();
+      return;
+    }
     state.inboxLoading = true;
     $("list-loading").hidden = false;
     $("list-empty").hidden = true;
@@ -537,7 +703,7 @@
     var cols = Math.min(3, Math.max(1, photos.length));
     var photoHtml = photos.length
       ? '<div class="evidence-photos" style="grid-template-columns:repeat(' + cols + ',1fr)">' + photos.map(function (p) {
-          var src = uploadUrl(p.path);
+          var src = photoSrc(p.path);
           return '<div class="evidence-photo" data-preview="' + escapeHtml(src) + '"><img src="' + escapeHtml(src) + '" alt="" data-preview="' + escapeHtml(src) + '">' +
             '<span class="evidence-photo-when">' + escapeHtml(p.when || "") + "</span></div>";
         }).join("") + "</div>"
@@ -592,6 +758,17 @@
     if (!card) return;
     if (card.consultation_id) {
       state.fromInbox = true;
+      if (state.demo) {
+        state.current = decorateRecord(JSON.parse(JSON.stringify(DEMO.consult)));
+        state.reply = Object.assign({}, EMPTY_REPLY);
+        state.history = [];
+        state.historyOpen = {};
+        state.historyModule = "vomit";
+        $("inbox-board").hidden = true;
+        renderDetail();
+        loadHistory(DEMO.consult.id);
+        return;
+      }
       api("/api/v1/doctor/consultations/" + encodeURIComponent(card.consultation_id)).then(function (rec) {
         state.current = decorateRecord(rec);
         state.reply = Object.assign({}, EMPTY_REPLY);
@@ -643,6 +820,14 @@
 
   function openClient(userId) {
     state.aliasEditing = false;
+    if (state.demo) {
+      state.clientCurrent = JSON.parse(JSON.stringify(DEMO.clientDetails[userId] || DEMO.clientDetails["demo-lixinran"]));
+      state.clientCat = null;
+      state.clientCatModule = "";
+      renderClients();
+      renderClientDetail();
+      return;
+    }
     api("/api/v1/doctor/clients/" + encodeURIComponent(userId)).then(function (res) {
       state.clientCurrent = res;
       state.clientCat = null;
@@ -771,6 +956,17 @@
       renderClientDetail();
       return;
     }
+    if (state.demo) {
+      state.clientCurrent.user.alias = next;
+      state.clientCurrent.user.display_name = next || state.clientCurrent.user.nickname;
+      DEMO.clients.forEach(function (c) {
+        if (c.user_id === uid) c.alias = next;
+      });
+      toast("示例里已改名（不会保存到服务器）");
+      renderClients();
+      renderClientDetail();
+      return;
+    }
     api("/api/v1/doctor/clients/" + encodeURIComponent(uid), "PATCH", { alias: next }).then(function () {
       toast("备注已保存");
       openClient(uid);
@@ -794,9 +990,21 @@
   function showWork() {
     $("view-login").hidden = true;
     $("view-work").hidden = false;
+    var banner = $("demo-banner");
+    if (banner) banner.hidden = !state.demo;
     renderToolbar();
-    startRefresh();
+    if (!state.demo) startRefresh();
     showSection(state.section || "clients");
+  }
+
+  function enterDemo() {
+    state.demo = true;
+    state.doctor = DEMO.doctor;
+    state.section = "consult-mine";
+    state.inboxBucket = "ask";
+    state.current = null;
+    state.clientCurrent = null;
+    showWork();
   }
 
   function doctorIntro(info) {
@@ -840,7 +1048,7 @@
   function decorateRecord(r) {
     r.timeText = formatTime(r.created_at);
     r.answeredTimeText = r.answered_at ? formatTime(r.answered_at) : "";
-    r.imageUrl = r.scan && r.scan.image_path ? uploadUrl(String(r.scan.image_path).split(",")[0]) : "";
+    r.imageUrl = r.scan && r.scan.image_path ? photoSrc(String(r.scan.image_path).split(",")[0]) : "";
     r.catContextItems = parseCatContext(r.scan && r.scan.cat_context);
     r.parsedComment = parseDoctorComment(r.doctor_comment);
     r.doctor_avatar_url = r.doctor_avatar ? uploadUrl(r.doctor_avatar) : "";
@@ -854,6 +1062,14 @@
   }
 
   function loadList() {
+    if (state.demo) {
+      state.loading = false;
+      $("list-loading").hidden = true;
+      state.records = state.filter === "pending" ? [decorateRecord(JSON.parse(JSON.stringify(DEMO.consult)))] : [];
+      state.pendingCount = 1;
+      renderList();
+      return;
+    }
     state.loading = true;
     $("list-loading").hidden = false;
     $("list-empty").hidden = true;
@@ -1162,6 +1378,20 @@
   }
 
   function loadHistory(cid) {
+    if (state.demo) {
+      state.historyLoading = false;
+      state.history = DEMO.history.map(function (r) {
+        var row = JSON.parse(JSON.stringify(r));
+        row.dateText = formatTime(row.created_at);
+        row.imageUrl = photoSrc(String(row.image_path || "").split(",")[0]);
+        row.moduleLabel = moduleLabel(row.module);
+        row.summary = historySummary(row);
+        row.catContextItems = [];
+        return row;
+      });
+      renderDetail();
+      return;
+    }
     state.historyLoading = true;
     renderDetail();
     api("/api/v1/doctor/consultations/" + encodeURIComponent(cid) + "/cat-scans").then(function (res) {
@@ -1193,6 +1423,11 @@
     var comment = composeDoctorComment(form);
     if (!comment) return toast("回复内容不能为空");
     if (comment.length > 500) return toast("回复内容超过 500 字");
+    if (state.demo) {
+      toast("示例模式不会真的发出回复");
+      closeDetail();
+      return;
+    }
     state.submitting = true;
     renderDetail();
     api("/api/v1/doctor/consultations/" + encodeURIComponent(state.current.id) + "/reply", "POST", { comment: comment })
@@ -1212,6 +1447,7 @@
   }
 
   function loadMe() {
+    if (state.demo) return Promise.resolve();
     return api("/api/v1/doctor/me").then(function (res) {
       if (res && res.doctor) {
         localStorage.setItem(INFO_KEY, JSON.stringify(res.doctor));
@@ -1224,6 +1460,10 @@
   }
 
   function loadQuickReplies() {
+    if (state.demo) {
+      state.quickReplies = ["留意精神食欲", "带上近期检测记录面诊", "先禁食观察"];
+      return;
+    }
     api("/api/v1/doctor/quick-replies").then(function (res) {
       state.quickReplies = (res && res.replies) || [];
     }).catch(function () {});
@@ -1231,6 +1471,7 @@
 
   function startRefresh() {
     stopRefresh();
+    if (state.demo) return;
     state.refreshTimer = setInterval(function () {
       if (document.hidden || $("view-work").hidden) return;
       if (state.section === "clients") loadClients();
@@ -1329,6 +1570,7 @@
   }
 
   function bindEvents() {
+    $("btn-demo").addEventListener("click", enterDemo);
     $("login-form").addEventListener("submit", function (e) {
       e.preventDefault();
       var loginName = ($("login-name").value || "").trim();
@@ -1513,6 +1755,20 @@
           renderClientDetail();
           return;
         }
+        if (state.demo) {
+          var cat = (state.clientCurrent.cats || []).find(function (c) { return c.id === catId; }) || { id: catId, name: "猫咪" };
+          state.clientCat = {
+            cat: cat,
+            scans: DEMO.history.map(function (r) {
+              var row = JSON.parse(JSON.stringify(r));
+              row.image_path = row.image_path || "";
+              return row;
+            })
+          };
+          state.clientCatModule = wantMod || (catId === "c-mimi" ? "vomit" : "stool");
+          renderClientDetail();
+          return;
+        }
         api("/api/v1/doctor/clients/" + encodeURIComponent(uid2) + "/cats/" + encodeURIComponent(catId))
           .then(function (res) {
             state.clientCat = res;
@@ -1561,7 +1817,11 @@
     $("btn-edit-profile").addEventListener("click", openProfile);
     $("btn-toolbar-avatar").addEventListener("click", openProfile);
     $("btn-logout").addEventListener("click", function () {
-      if (window.confirm("退出登录？会返回登录页")) {
+      var msg = state.demo ? "退出示例界面？" : "退出登录？会返回登录页";
+      if (window.confirm(msg)) {
+        state.demo = false;
+        state.section = "clients";
+        state.inboxBucket = "";
         clearSession();
         showLogin();
       }
@@ -1610,6 +1870,10 @@
 
   function boot() {
     bindEvents();
+    if (/[?&]demo=1(?:&|$)/.test(location.search) || location.hash === "#demo") {
+      enterDemo();
+      return;
+    }
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(INFO_KEY) || "null"); } catch (e) {}
     if (token()) {
