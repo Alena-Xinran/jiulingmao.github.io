@@ -63,6 +63,7 @@
     clientCat: null,
     clientCatModule: "",
     clientSearch: "",
+    clientScanOpen: {},
     historyModule: ""
   };
 
@@ -193,13 +194,81 @@
     return historySummary(Object.assign({ module: last.module }, last));
   }
 
+  function scanPhotoUrl(s) {
+    s = s || {};
+    if (s.imageUrl) return s.imageUrl;
+    if (s.image_path) return uploadUrl(String(s.image_path).split(",")[0]);
+    return "";
+  }
+
+  function scanResultDetailHtml(s) {
+    s = s || {};
+    var html = "";
+    var photo = scanPhotoUrl(s);
+    if (photo) {
+      html += '<div class="history-result-photo"><img src="' + escapeHtml(photo) +
+        '" alt="检测照片" data-preview="' + escapeHtml(photo) + '"></div>';
+    }
+    var chips = [];
+    if (s.module === "fgs") {
+      chips.push("疼痛总分 " + (s.total_score || 0) + "/18");
+      if (s.pain_level) chips.push(String(s.pain_level));
+    } else if (s.module === "stool") {
+      chips.push("普瑞纳 " + (s.fecal_score || 0) + "/7");
+    } else if (s.module === "teeth") {
+      chips.push("牙龈炎 GI " + (s.fecal_score || 0) + "/3");
+      chips.push("牙结石 CI " + (s.body_score || 0) + "/3");
+    } else if (s.module === "postop" && s.pain_level) {
+      chips.push("伤口 " + s.pain_level);
+    } else if (s.module === "vomit" && s.pain_level) {
+      chips.push(String(s.pain_level));
+    }
+    if (s.confidence) chips.push("置信 " + s.confidence);
+    if (chips.length) {
+      html += '<div class="history-score-chips">' + chips.map(function (c) {
+        return '<span class="history-score-chip">' + escapeHtml(c) + "</span>";
+      }).join("") + "</div>";
+    }
+    if (s.module === "fgs") {
+      html += '<div class="history-dim-grid">' + FGS_DIMS.map(function (pair) {
+        return '<div class="history-dim"><span>' + pair[1] + "</span><strong>" +
+          escapeHtml(s[pair[0]] || 0) + "/2</strong></div>";
+      }).join("") + "</div>";
+    }
+    if (s.diagnosis) {
+      html += '<div><div class="answered-label">测出来的大概结果</div><div class="answered-text">' +
+        escapeHtml(s.diagnosis) + "</div></div>";
+    }
+    if (s.advice) {
+      html += '<div><div class="answered-label">AI 建议</div><div class="answered-text">' +
+        escapeHtml(s.advice) + "</div></div>";
+    }
+    var ctx = s.catContextItems || parseCatContext(s.cat_context);
+    if (ctx && ctx.length) {
+      html += '<div><div class="answered-label">用户填写的情况</div>' + ctxListHtml(ctx) + "</div>";
+    }
+    if (!html) {
+      html = '<p class="doc-empty">这条记录没有更细的文字结果</p>';
+    }
+    return html;
+  }
+
   function scanRecordCardHtml(s) {
-    var img = s.image_path
-      ? '<img class="history-thumb" src="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '" alt="" data-preview="' + escapeHtml(uploadUrl(String(s.image_path).split(",")[0])) + '">'
+    var open = !!state.clientScanOpen[s.id];
+    var photo = scanPhotoUrl(s);
+    var img = photo
+      ? '<img class="history-thumb" src="' + escapeHtml(photo) + '" alt="">'
       : '<div class="history-thumb"></div>';
-    return '<div class="history-card"><div class="history-card-head">' + img +
+    var inner = '<button type="button" class="history-card-head" data-toggle-client-scan="' + escapeHtml(s.id) + '">' +
+      img +
       '<div class="history-meta"><span class="history-summary">' + escapeHtml(historySummary(s)) + "</span>" +
-      '<span class="history-date">' + escapeHtml(formatTime(s.created_at)) + "</span></div></div></div>";
+      '<span class="history-date">' + escapeHtml(formatTime(s.created_at)) + "</span></div>" +
+      '<span class="history-open-hint">' + (open ? "收起" : "点开看结果") + "</span>" +
+      '<span class="history-arrow">›</span></button>';
+    if (open) {
+      inner += '<div class="history-detail">' + scanResultDetailHtml(s) + "</div>";
+    }
+    return '<div class="history-card' + (open ? " is-open" : "") + '">' + inner + "</div>";
   }
 
   function formatTime(ts) {
@@ -490,7 +559,7 @@
           if (!list.length) {
             panels += '<p class="doc-empty">这只猫还没有' + label + "检测</p>";
           } else {
-            panels += list.map(scanRecordCardHtml).join("");
+            panels += '<div class="history-list">' + list.map(scanRecordCardHtml).join("") + "</div>";
           }
           panels += "</div>";
         }
@@ -782,33 +851,16 @@
           var cls = "history-card" + (item.is_current ? " is-current" : "") + (open ? " is-open" : "");
           var inner = '<button type="button" class="history-card-head" data-toggle-history="' + escapeHtml(item.id) + '">' +
             (item.imageUrl
-              ? '<img class="history-thumb" src="' + escapeHtml(item.imageUrl) + '" alt="" data-preview="' + escapeHtml(item.imageUrl) + '">'
+              ? '<img class="history-thumb" src="' + escapeHtml(item.imageUrl) + '" alt="">'
               : '<div class="history-thumb"></div>') +
             '<div class="history-meta"><div class="history-meta-row">' +
             (item.is_current ? '<span class="history-current-tag">本次</span>' : "") +
             '</div><span class="history-summary">' + escapeHtml(item.summary) + "</span>" +
             '<span class="history-date">' + escapeHtml(item.dateText) + "</span></div>" +
+            '<span class="history-open-hint">' + (open ? "收起" : "点开看结果") + "</span>" +
             '<span class="history-arrow">›</span></button>';
           if (open) {
-            inner += '<div class="history-detail">';
-            if (item.module === "fgs") {
-              inner += '<div class="history-dim-grid">' + FGS_DIMS.map(function (pair) {
-                return '<div class="history-dim"><span>' + pair[1] + "</span><strong>" +
-                  escapeHtml(item[pair[0]] || 0) + "/2</strong></div>";
-              }).join("") + "</div>";
-            }
-            if (item.diagnosis) {
-              inner += '<div><div class="answered-label">AI 初判</div><div class="answered-text">' +
-                escapeHtml(item.diagnosis) + "</div></div>";
-            }
-            if (item.advice) {
-              inner += '<div><div class="answered-label">AI 建议</div><div class="answered-text">' +
-                escapeHtml(item.advice) + "</div></div>";
-            }
-            if (item.catContextItems && item.catContextItems.length) {
-              inner += "<div><div class=\"answered-label\">用户填写的情况</div>" + ctxListHtml(item.catContextItems) + "</div>";
-            }
-            inner += "</div>";
+            inner += '<div class="history-detail">' + scanResultDetailHtml(item) + "</div>";
           }
           return '<div class="' + cls + '">' + inner + "</div>";
         }).join("") + "</div>";
@@ -1211,7 +1263,15 @@
         state.clientCurrent = null;
         state.clientCat = null;
         state.clientCatModule = "";
+        state.clientScanOpen = {};
         renderClients();
+        renderClientDetail();
+        return;
+      }
+      var clientScan = e.target.closest("[data-toggle-client-scan]");
+      if (clientScan) {
+        var sid = clientScan.getAttribute("data-toggle-client-scan");
+        state.clientScanOpen[sid] = !state.clientScanOpen[sid];
         renderClientDetail();
         return;
       }

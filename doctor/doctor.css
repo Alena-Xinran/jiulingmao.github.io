@@ -783,6 +783,17 @@
   cursor: pointer;
 }
 
+.history-card-head:hover {
+  background: #EEF4FB;
+}
+
+.history-open-hint {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: #3B7EC4;
+  white-space: nowrap;
+}
+
 .history-thumb {
   width: 52px;
   height: 52px;
@@ -840,6 +851,37 @@
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
+}
+
+.history-result-photo {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1b1b1f;
+  border: 1.5px solid var(--border);
+}
+
+.history-result-photo img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.history-score-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.history-score-chip {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: #2A5F9E;
+  background: #EFF5FD;
+  border: 1px solid #D4E4F6;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
 }
 
 .history-dim-grid {
