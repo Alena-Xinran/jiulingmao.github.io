@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>九龄猫医生工作台</title>
-  <meta name="description" content="九龄猫签约兽医工作台：查看咨询、阅读检测档案并回复主人。">
+  <meta name="description" content="九龄猫签约兽医工作台：待办队列、按类型审阅、三键回复。">
   <meta name="robots" content="noindex, nofollow">
   <link rel="canonical" href="https://www.jiulingmao.com/doctor/">
   <link rel="stylesheet" href="../styles.css?v=18">
-  <link rel="stylesheet" href="doctor.css?v=7">
+  <link rel="stylesheet" href="doctor.css?v=8">
   <link rel="icon" href="../logo.png" type="image/png">
 </head>
 <body class="doctor-page">
@@ -38,7 +38,7 @@
       <div class="doc-login-card">
         <img class="doc-login-logo" src="../logo.png" alt="">
         <h1>九龄猫 · 医生工作台</h1>
-        <p class="doc-login-sub">把产品给自己的客户用，居家检测会回到你这边</p>
+        <p class="doc-login-sub">红黄绿排队，三键回复。先看完今天的待办再下班。</p>
         <form id="login-form" autocomplete="on">
           <label class="doc-field">
             <span>账号</span>
@@ -50,8 +50,8 @@
           </label>
           <button class="doc-btn-primary" id="login-submit" type="submit">登 录</button>
         </form>
-        <button type="button" class="doc-btn-demo" id="btn-demo">查看示例界面</button>
-        <p class="doc-login-hint">仅限已注册医生账号。养猫用户请使用「九龄猫」小程序或 App。</p>
+        <button type="button" class="doc-btn-demo" id="btn-demo">给医生演示 · 30 只猫队列</button>
+        <p class="doc-login-hint">演示数据在浏览器里，不会写入服务器。养猫用户请用「九龄猫」小程序或 App。</p>
       </div>
     </section>
 
@@ -75,70 +75,69 @@
         </div>
       </header>
 
-      <p class="doc-demo-banner" id="demo-banner" hidden>这是示例界面，数据是假的，不会写入服务器。点「客户问诊」看三类收件箱。</p>
-
-      <p class="doc-notify-note">把推荐码给诊所客户。他们用九龄猫检测后，会作为「你的客户」出现在这里。自然来的用户不会绑到你名下。</p>
-
-      <div class="doc-referral" id="referral-bar" hidden>
-        <div>
-          <div class="doc-referral-label">给你客户的推荐码</div>
-          <strong id="referral-code">————</strong>
-          <div class="doc-referral-hint" id="referral-count">还没有绑定客户</div>
-        </div>
-        <div class="doc-toolbar-actions">
-          <button type="button" class="doc-btn-ghost" id="btn-copy-code">复制推荐码</button>
-          <button type="button" class="doc-btn-ghost" id="btn-copy-link">复制链接</button>
-        </div>
-      </div>
+      <p class="doc-demo-banner" id="demo-banner" hidden>示例数据，不会写入服务器。队列：1 红 / 3 黄 / 26 绿。处理完自动下一条。</p>
 
       <div class="doc-tabs doc-main-tabs" role="tablist">
-        <button type="button" class="doc-tab is-active" data-section="clients">我的客户 <span class="doc-tab-count" id="client-count" hidden>0</span></button>
-        <button type="button" class="doc-tab" data-section="consult-mine">客户问诊 <span class="doc-tab-count" id="pending-count" hidden>0</span></button>
-        <button type="button" class="doc-tab" data-section="consult-platform">平台问诊</button>
+        <button type="button" class="doc-tab is-active" data-section="todo">待办 <span class="doc-tab-count" id="todo-count" hidden>0</span></button>
+        <button type="button" class="doc-tab" data-section="clients">我的客户 <span class="doc-tab-count" id="client-count" hidden>0</span></button>
+        <button type="button" class="doc-tab" data-section="ask">问诊 <span class="doc-tab-count" id="ask-count" hidden>0</span></button>
+        <button type="button" class="doc-tab" data-section="settings">设置</button>
       </div>
 
-      <div id="pane-clients" class="doc-clients-pane">
+      <div id="pane-todo" class="doc-todo-pane">
+        <div class="doc-split">
+          <aside class="doc-list-pane">
+            <div class="todo-progress" id="todo-progress"></div>
+            <div id="todo-list" class="doc-list"></div>
+            <p id="todo-loading" class="doc-empty" hidden>加载中…</p>
+          </aside>
+          <article class="doc-detail-pane" id="review-pane">
+            <div class="doc-detail-empty" id="review-empty">
+              <p>从左侧点开一条</p>
+              <span>红档先看，黄档待查看，绿档折叠不打扰。</span>
+            </div>
+            <div id="review-body" hidden></div>
+          </article>
+        </div>
+      </div>
+
+      <div id="pane-clients" class="doc-clients-pane" hidden>
         <div class="doc-split">
           <aside class="doc-list-pane">
             <div class="doc-clients-toolbar">
               <input id="client-search" type="search" placeholder="搜客户昵称、备注或猫名" autocomplete="off">
             </div>
             <div id="client-list" class="doc-list"></div>
-            <p id="client-empty" class="doc-empty">还没有诊所客户。把上面的推荐码发给家长即可。</p>
+            <p id="client-empty" class="doc-empty">还没有诊所客户。到「设置」复制推荐码发给家长。</p>
             <p id="client-loading" class="doc-empty" hidden>加载中…</p>
           </aside>
           <article class="doc-detail-pane" id="client-detail-pane">
             <div class="doc-detail-empty" id="client-detail-empty">
               <p>从左侧选择一位客户</p>
-              <span>点开一只猫，按面部 / 便便 / 呕吐 / 牙齿 / 伤口分板块看检测。</span>
+              <span>点开一只猫，看五种检测的时间线和医生回复。</span>
             </div>
             <div id="client-detail-body" hidden></div>
           </article>
         </div>
       </div>
 
-      <div id="pane-consult" class="doc-consult-pane" hidden>
-        <div id="consult-platform-tabs" class="doc-tabs doc-sub-tabs" hidden>
-          <button type="button" class="doc-tab is-active" data-filter="pending">待回复</button>
-          <button type="button" class="doc-tab" data-filter="answered">已回复</button>
-        </div>
+      <div id="pane-ask" class="doc-ask-pane" hidden>
         <div class="doc-split">
           <aside class="doc-list-pane">
-            <div id="inbox-cats" class="doc-list" hidden></div>
-            <div id="consult-list" class="doc-list"></div>
-            <p id="list-empty" class="doc-empty" hidden>暂无待回复的咨询</p>
-            <p id="list-loading" class="doc-empty">加载中…</p>
+            <div id="ask-list" class="doc-list"></div>
+            <p id="ask-empty" class="doc-empty">主人点「问医生」会落到最近一条记录的对话里，不另开问诊单。</p>
           </aside>
-          <article class="doc-detail-pane" id="detail-pane">
-            <div id="inbox-board" hidden></div>
-            <div id="detail-empty" class="doc-detail-empty">
-              <p>从左侧选择一条咨询</p>
-              <span>诊所客户能看到全家猫档案；平台问诊仍只看这一条。</span>
+          <article class="doc-detail-pane" id="ask-detail-pane">
+            <div class="doc-detail-empty" id="ask-detail-empty">
+              <p>记录上的对话</p>
+              <span>医生回复后，主人限 2 轮追问，48 小时结单。</span>
             </div>
-            <div id="detail-body" hidden></div>
+            <div id="ask-detail-body" hidden></div>
           </article>
         </div>
       </div>
+
+      <div id="pane-settings" class="doc-settings-pane" hidden></div>
     </section>
   </main>
 
@@ -161,11 +160,11 @@
       </label>
       <label class="doc-field">
         <span>城市</span>
-        <input id="profile-city" type="text" maxlength="40" placeholder="如：上海">
+        <input id="profile-city" type="text" maxlength="40" placeholder="如：杭州">
       </label>
       <label class="doc-field">
         <span>宠物医院</span>
-        <input id="profile-hospital" type="text" maxlength="60" placeholder="如：爱心宠物医院">
+        <input id="profile-hospital" type="text" maxlength="60" placeholder="如：西湖宠物医院">
       </label>
       <label class="doc-field">
         <span>专业</span>
@@ -185,6 +184,34 @@
     </div>
   </div>
 
+  <div id="override-mask" class="doc-mask" hidden>
+    <div class="doc-modal" role="dialog" aria-labelledby="override-title">
+      <h2 id="override-title">调整档位</h2>
+      <p class="doc-modal-lead">医生可以下调 AI 判档。AI 不能下调。请选一个原因，这条会留下训练标注。</p>
+      <div class="override-levels" id="override-levels"></div>
+      <div class="doc-field">
+        <span>原因</span>
+        <div class="doc-gender" id="override-reasons"></div>
+      </div>
+      <div class="doc-modal-btns">
+        <button type="button" class="doc-btn-ghost-dark" id="btn-override-cancel">取消</button>
+        <button type="button" class="doc-btn-primary" id="btn-override-save">确认改档</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="plan-mask" class="doc-mask" hidden>
+    <div class="doc-modal doc-modal-wide" role="dialog" aria-labelledby="plan-title">
+      <h2 id="plan-title">开跟诊计划</h2>
+      <p class="doc-modal-lead" id="plan-lead">绝育术后 14 天 · 主人会按节点收到拍照提醒。</p>
+      <div id="plan-body"></div>
+      <div class="doc-modal-btns">
+        <button type="button" class="doc-btn-ghost-dark" id="btn-plan-cancel">取消</button>
+        <button type="button" class="doc-btn-primary" id="btn-plan-save">发给主人</button>
+      </div>
+    </div>
+  </div>
+
   <div id="lightbox" class="doc-lightbox" hidden>
     <button type="button" class="doc-lightbox-close" aria-label="关闭">&times;</button>
     <img id="lightbox-img" alt="检测照片">
@@ -192,6 +219,7 @@
 
   <div id="toast" class="doc-toast" hidden></div>
 
-  <script src="doctor.js?v=7"></script>
+  <script src="demo-data.js?v=1"></script>
+  <script src="doctor.js?v=8"></script>
 </body>
 </html>

@@ -4,74 +4,96 @@
   var API_BASE = "https://catapi.jiulingmao.com";
   var TOKEN_KEY = "jiulingmao_doctor_token";
   var INFO_KEY = "jiulingmao_doctor_info";
+  var DEMO_KEY = "jiulingmao_doctor_demo_v1";
   var DAY_OPTIONS = ["1", "2", "3", "5", "7"];
-  var FGS_DIMS = [
+  var EMPTY_REPLY = { level: "", yellowDays: "2", action: "", note: "" };
+  var FGS_FACE = [
     ["ear_position", "耳朵"],
     ["orbital_tightening", "眼部"],
     ["muzzle_tension", "口鼻"],
     ["whiskers_change", "胡须"],
-    ["head_position", "头肩"],
+    ["head_position", "头肩"]
+  ];
+  var FGS_BODY = [
     ["body_shape", "体型"],
     ["fur_condition", "毛发"],
     ["posture", "姿态"],
     ["eye_spirit", "眼神"]
   ];
-  var CTX_LABELS = {
-    photo_state: "拍照时状态",
-    appetite: "食欲",
-    water: "饮水",
-    activity: "活动量",
-    stool: "便便",
-    abnormal: "异常表现",
-    vomit_event_type: "事件类型",
-    wound_type: "伤口来源",
-    postop_day: "术后第几天",
-    surgery_type: "手术类型",
-    surgery_name: "具体手术",
-    injury_detail: "受伤经过"
+  var TYPE_META = {
+    fgs: { label: "面部/体态", short: "面部" },
+    stool: { label: "便便", short: "便便" },
+    vomit: { label: "呕吐物", short: "呕吐" },
+    teeth: { label: "牙齿", short: "牙齿" },
+    postop: { label: "伤口", short: "伤口" }
   };
-  var CTX_ORDER = [
-    "photo_state", "vomit_event_type", "wound_type", "postop_day",
-    "surgery_type", "surgery_name", "injury_detail",
-    "appetite", "water", "activity", "stool", "abnormal"
-  ];
+  var TIER_TEXT = { good: "绿档", observe: "黄档", vet: "红档" };
+  var TIER_HINT = { good: "正常", observe: "待查看", vet: "待处理" };
   var LEVEL_LINES = {
-    green: "🟢 先在家观察,暂时不用去医院",
+    green: "🟢 先在家观察，暂时不用去医院",
     red: "🔴 建议今天就去"
   };
-  var EMPTY_REPLY = { level: "", yellowDays: "2", action: "", note: "" };
-  var DEMO_NOW = Math.floor(Date.now() / 1000);
 
   var state = {
     doctor: null,
-    section: "clients",
-    scope: "mine",
-    filter: "pending",
+    demo: false,
+    section: "todo",
     records: [],
-    pendingCount: 0,
-    loading: false,
+    archive: [],
+    cats: [],
+    owners: [],
+    phrases: {
+      fgs: ["先观察精神、食欲、活动量", "建议 48 小时内到院评估疼痛", "疼痛信号明显，建议今天到院"],
+      stool: ["先观察精神与便便形状", "建议带新鲜粪便到院化验", "便血或精神差，请今天到院"],
+      vomit: ["今晚停零食，观察是否再吐", "24 小时内再吐，建议到院", "带血或精神差，请急诊"],
+      teeth: ["先观察进食是否疼痛", "建议口腔探诊确认", "疑似牙吸收，请尽快口腔科"],
+      postop: ["切口看起来正常，继续限制活动", "建议按计划到院复查/拆线", "红肿渗液或精神差，请今天到院"]
+    },
+    overrideReasons: [
+      { id: "fur", label: "误判毛发遮挡" },
+      { id: "breed", label: "该品种正常" },
+      { id: "seen", label: "已当面看过" },
+      { id: "borderline", label: "分数临界，临床不支持" },
+      { id: "other", label: "其他" }
+    ],
+    redlineRules: {
+      blood: { label: "带血", hot: true },
+      vomit_3x: { label: "24h 超 3 次", hot: true },
+      lethargy: { label: "精神萎靡", hot: true },
+      abscess: { label: "脓肿/撕脱/烧烫", hot: true },
+      systemic: { label: "全身红旗", hot: true },
+      stool4: { label: "4分·按观察处理", hot: false },
+      forl: { label: "疑似牙吸收 FORL/TR", hot: false }
+    },
+    planTemplate: {
+      id: "neuter-14",
+      name: "绝育术后 14 天",
+      items: [
+        { day: 1, title: "术后第 1 天", text: "拍一张切口特写。看有没有渗液、裂开，精神食欲是否回来。" },
+        { day: 3, title: "术后第 3 天", text: "再拍切口。轻度红肿可接受；若红肿扩大或流脓，直接到院。" },
+        { day: 7, title: "术后第 7 天", text: "切口应明显收干。继续圈养，不要拆线除非主治安排。" },
+        { day: 14, title: "术后第 14 天", text: "按医院安排拆线/复查。拍一张收尾照，归档。" }
+      ]
+    },
+    settings: { notify_red: true, notify_yellow: true, notify_followup: true },
+    plans: {},
     current: null,
-    history: [],
-    historyLoading: false,
-    historyOpen: {},
     reply: Object.assign({}, EMPTY_REPLY),
     submitting: false,
-    quickReplies: [],
-    profile: { name: "", title: "", gender: "female", avatar_url: "", city: "", hospital: "" },
-    refreshTimer: null,
+    greenOpen: false,
+    overrideDraft: { level: "", reason: "" },
+    planCatId: "",
     clients: [],
     clientCurrent: null,
     clientCat: null,
     clientCatModule: "",
     clientSearch: "",
     clientScanOpen: {},
-    historyModule: "",
     aliasEditing: false,
-    inboxBuckets: [],
-    inboxBucket: "",
-    inboxLoading: false,
-    fromInbox: false,
-    demo: false
+    askCurrent: null,
+    fromAsk: false,
+    profile: { name: "", title: "", gender: "female", avatar_url: "", city: "", hospital: "" },
+    refreshTimer: null
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -120,306 +142,6 @@
     return uploadUrl(p);
   }
 
-  function demoPhoto(file, when, hoursAgo) {
-    return {
-      path: "../" + file,
-      created_at: DEMO_NOW - Math.round((hoursAgo || 0) * 3600),
-      when: when
-    };
-  }
-
-  var DEMO = {
-    doctor: {
-      id: "demo-doc",
-      name: "李医生",
-      city: "上海",
-      hospital: "爱心宠物医院",
-      title: "猫内科",
-      gender: "female",
-      referral_code: "DEMO01",
-      referral_url: "https://www.jiulingmao.com/join/?code=DEMO01",
-      client_count: 3
-    },
-    clients: [
-      { user_id: "demo-lixinran", alias: "李欣然", nickname: "Xinran (Alena)", avatar_url: "", cat_count: 4, cat_names: "团团、邦邦、ab、a", pending_count: 1, bound_at: DEMO_NOW - 3600 },
-      { user_id: "demo-wang", alias: "王女士", nickname: "wang", avatar_url: "", cat_count: 1, cat_names: "年糕", pending_count: 0, bound_at: DEMO_NOW - 86400 * 12 },
-      { user_id: "demo-chen", alias: "陈妈妈", nickname: "小陈", avatar_url: "", cat_count: 1, cat_names: "咪咪", pending_count: 1, bound_at: DEMO_NOW - 86400 * 20 }
-    ]
-  };
-  DEMO.inbox = {
-    pending_count: 1,
-    buckets: [
-      {
-        key: "ok", color: "green", owner_count: 7, sub: "测完绿档，已安抚", action: "无需回复",
-        cards: [
-          {
-            id: "demo-tuantuan-stool", user_id: "demo-lixinran", owner_alias: "李欣然",
-            cat_name: "团团", module: "stool", module_label: "便便记录", tier: "good",
-            photos: [demoPhoto("bangbang/2026-7-12.png", "今天 09:12", 10), demoPhoto("bangbang/2026-6-25.png", "昨天", 30), demoPhoto("bangbang/2026-6-2.png", "5 天前", 120)],
-            badge: "今天 · 绿档 普瑞纳 3/7", summary: "近 30 天便便 8 次，间隔较稳 · 便便 2-3 分正常"
-          },
-          {
-            id: "demo-bangbang-fgs", user_id: "demo-lixinran", owner_alias: "李欣然",
-            cat_name: "邦邦", module: "fgs", module_label: "面部测痛记录", tier: "good",
-            photos: [demoPhoto("assets/scan1.png", "今天 08:02", 12), demoPhoto("assets/scan2.png", "3 天前", 72)],
-            badge: "今天 · 绿档 疼痛 3/18", summary: "近 30 天面部测痛 4 次，间隔在拉长"
-          },
-          {
-            id: "demo-ab-teeth", user_id: "demo-lixinran", owner_alias: "李欣然",
-            cat_name: "ab", module: "teeth", module_label: "牙齿记录", tier: "good",
-            photos: [demoPhoto("example/3.png", "2 天前", 50)],
-            badge: "2 天前 · 绿档 GI 0/3", summary: "近 30 天牙齿 1 次"
-          }
-        ]
-      },
-      {
-        key: "urgent", color: "red", owner_count: 1, sub: "疑似尿闭，已提示急诊", action: "直接到院",
-        cards: [
-          {
-            id: "demo-niangao-stool", user_id: "demo-wang", owner_alias: "王女士",
-            cat_name: "年糕", module: "stool", module_label: "便便记录", tier: "vet",
-            photos: [demoPhoto("example/1.png", "今天 07:40", 14), demoPhoto("example/2.png", "今天 06:15", 16)],
-            badge: "今天 · 红档 几乎无尿", summary: "近 24 小时反复蹲盆 · 已提示直接到院"
-          }
-        ]
-      },
-      {
-        key: "ask", color: "yellow", owner_count: 1, sub: "拿不准，留言问您", action: "明早回也行",
-        cards: [
-          {
-            id: "demo-ask-mimi", user_id: "demo-chen", owner_alias: "陈妈妈",
-            cat_name: "咪咪", module: "vomit", module_label: "呕吐记录",
-            consultation_id: "demo-ask-mimi", consultation_status: "pending", tier: "observe",
-            photos: [
-              demoPhoto("bangbang/2026-4-26.png", "今天 21:03", 1),
-              demoPhoto("bangbang/2026-4-20.png", "今天 08:40", 12),
-              demoPhoto("bangbang/2026-3.png", "3 天前", 72)
-            ],
-            badge: "今晚 · 黄档 毛球混食物",
-            summary: "近 30 天呕吐 3 次，间隔在拉长 · 便便 2-3 分正常"
-          }
-        ]
-      }
-    ]
-  };
-  DEMO.consult = {
-    id: "demo-ask-mimi",
-    user_id: "demo-chen",
-    scan_id: "demo-scan-mimi",
-    status: "pending",
-    created_at: DEMO_NOW - 3600,
-    owner_nickname: "小陈",
-    owner_alias: "陈妈妈",
-    cat_count: 1,
-    cat: { name: "咪咪", breed: "英短", gender: "female", birth_date: "2022-04-01", weight: 4.2, neutered: 1, avatar_url: "" },
-    scan: {
-      module: "vomit",
-      pain_level: "observe",
-      diagnosis: "更像毛球混食物，今晚这一口偏黄，先观察精神食欲。",
-      advice: "今晚先停零食，看会不会再吐。若 24 小时内再吐两次，或精神变差，建议就医。",
-      image_path: "../bangbang/2026-4-26.png",
-      fecal_score: 0,
-      total_score: 0,
-      cat_context: JSON.stringify({ appetite: "略差", water: "正常", vomit_event_type: "更像呕吐" })
-    }
-  };
-  DEMO.history = [
-    { id: "demo-scan-mimi", module: "vomit", created_at: DEMO_NOW - 3600, image_path: "../bangbang/2026-4-26.png", pain_level: "observe", diagnosis: "毛球混食物", is_current: true },
-    { id: "demo-scan-mimi-2", module: "vomit", created_at: DEMO_NOW - 12 * 3600, image_path: "../bangbang/2026-4-20.png", pain_level: "observe", diagnosis: "未消化猫粮" },
-    { id: "demo-scan-mimi-3", module: "vomit", created_at: DEMO_NOW - 72 * 3600, image_path: "../bangbang/2026-3.png", pain_level: "good", diagnosis: "少量毛团" },
-    { id: "demo-scan-stool", module: "stool", created_at: DEMO_NOW - 86400, image_path: "../example/4.png", fecal_score: 3, diagnosis: "成型偏软" }
-  ];
-  DEMO.clientDetails = {
-    "demo-lixinran": {
-      cat_count: 4,
-      user: { id: "demo-lixinran", nickname: "Xinran (Alena)", alias: "李欣然", display_name: "李欣然", avatar_url: "", bound_at: DEMO_NOW - 3600 },
-      cats: [
-        { id: "c-tuantuan", name: "团团", breed: "英短", gender: "female", neutered: 1, scan_count: 49, modules: { fgs: { count: 12, last: { module: "fgs", total_score: 3 } }, stool: { count: 20, last: { module: "stool", fecal_score: 3 } }, vomit: { count: 8, last: { module: "vomit" } }, teeth: { count: 6, last: { module: "teeth", fecal_score: 0 } }, postop: { count: 3, last: { module: "postop", pain_level: "良好" } } } },
-        { id: "c-bangbang", name: "邦邦", breed: "英短", gender: "male", neutered: 1, scan_count: 12, modules: { fgs: { count: 8, last: { module: "fgs", total_score: 4 } }, stool: { count: 2, last: { module: "stool", fecal_score: 3 } }, vomit: { count: 1, last: {} }, teeth: { count: 1, last: {} }, postop: { count: 0, last: null } } },
-        { id: "c-ab", name: "ab", breed: "", gender: "", neutered: 0, scan_count: 2, modules: { fgs: { count: 0, last: null }, stool: { count: 0, last: null }, vomit: { count: 0, last: null }, teeth: { count: 2, last: { module: "teeth" } }, postop: { count: 0, last: null } } },
-        { id: "c-a", name: "a", breed: "", gender: "", neutered: 0, scan_count: 1, modules: { fgs: { count: 1, last: { module: "fgs", total_score: 2 } }, stool: { count: 0, last: null }, vomit: { count: 0, last: null }, teeth: { count: 0, last: null }, postop: { count: 0, last: null } } }
-      ],
-      consultations: [{ id: "demo-ask-old", status: "pending", module: "teeth", created_at: DEMO_NOW - 86400 * 6, cat_name: "团团" }]
-    },
-    "demo-wang": {
-      cat_count: 1,
-      user: { id: "demo-wang", nickname: "wang", alias: "王女士", display_name: "王女士", avatar_url: "", bound_at: DEMO_NOW - 86400 * 12 },
-      cats: [{ id: "c-niangao", name: "年糕", breed: "美短", gender: "male", neutered: 1, scan_count: 6, modules: { fgs: { count: 1, last: {} }, stool: { count: 4, last: { module: "stool", fecal_score: 6 } }, vomit: { count: 1, last: {} }, teeth: { count: 0, last: null }, postop: { count: 0, last: null } } }],
-      consultations: []
-    },
-    "demo-chen": {
-      cat_count: 1,
-      user: { id: "demo-chen", nickname: "小陈", alias: "陈妈妈", display_name: "陈妈妈", avatar_url: "", bound_at: DEMO_NOW - 86400 * 20 },
-      cats: [{ id: "c-mimi", name: "咪咪", breed: "英短", gender: "female", neutered: 1, scan_count: 9, modules: { fgs: { count: 1, last: {} }, stool: { count: 3, last: { module: "stool", fecal_score: 3 } }, vomit: { count: 5, last: { module: "vomit" } }, teeth: { count: 0, last: null }, postop: { count: 0, last: null } } }],
-      consultations: [{ id: "demo-ask-mimi", status: "pending", module: "vomit", created_at: DEMO_NOW - 3600, cat_name: "咪咪" }]
-    }
-  };
-
-  function relativeUploadPath(url) {
-    var abs = String(url || "");
-    if (abs.indexOf(API_BASE) === 0) return abs.slice(API_BASE.length);
-    return abs;
-  }
-
-  function avatarFallback(name, kind) {
-    var initial = String(name || (kind === "cat" ? "猫" : "医")).slice(0, 1);
-    var bg = kind === "cat" ? "#C8A07E" : "#2A5F9E";
-    var svg =
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
-      '<rect width="64" height="64" rx="32" fill="' + bg + '"/>' +
-      '<text x="32" y="42" text-anchor="middle" fill="#fff" font-size="28" font-family="sans-serif">' +
-      escapeHtml(initial) +
-      "</text></svg>";
-    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-  }
-
-  function doctorAvatar(info) {
-    info = info || {};
-    return info.avatar_url ? uploadUrl(info.avatar_url) : avatarFallback(info.name, "doctor");
-  }
-
-  function catAvatar(cat) {
-    cat = cat || {};
-    return cat.avatar_url ? uploadUrl(cat.avatar_url) : avatarFallback(cat.name, "cat");
-  }
-
-  var FIVE_MODULES = [
-    { key: "fgs", label: "面部测痛" },
-    { key: "stool", label: "便便" },
-    { key: "vomit", label: "呕吐物" },
-    { key: "teeth", label: "牙齿" },
-    { key: "postop", label: "伤口" }
-  ];
-
-  function moduleLabel(module) {
-    if (module === "stool") return "便便";
-    if (module === "vomit") return "呕吐物";
-    if (module === "teeth") return "牙齿";
-    if (module === "postop") return "伤口";
-    if (module === "meow") return "猫语";
-    return "面部测痛";
-  }
-
-  function scanSummary(scan) {
-    scan = scan || {};
-    if (scan.module === "fgs") return "疼痛总分 " + (scan.total_score || 0) + "/18 · " + (scan.pain_level || "");
-    if (scan.module === "stool") return "普瑞纳评分 " + (scan.fecal_score || 0) + "/7";
-    if (scan.module === "teeth") return "GI " + (scan.fecal_score || 0) + "/3 · CI " + (scan.body_score || 0) + "/3";
-    if (scan.module === "postop") return "伤口 " + (scan.pain_level || "");
-    if (scan.module === "vomit") return "呕吐物记录";
-    return moduleLabel(scan.module);
-  }
-
-  function historySummary(row) {
-    if (row.module === "fgs") return "疼痛 " + (row.total_score || 0) + "/18";
-    if (row.module === "stool") return "普瑞纳 " + (row.fecal_score || 0) + "/7";
-    if (row.module === "teeth") return "GI " + (row.fecal_score || 0) + "/3 · CI " + (row.body_score || 0) + "/3";
-    if (row.module === "postop") return "伤口 " + (row.pain_level || "");
-    return "呕吐物记录";
-  }
-
-  function groupByModule(rows) {
-    var map = {};
-    FIVE_MODULES.forEach(function (m) { map[m.key] = []; });
-    (rows || []).forEach(function (r) {
-      var k = r.module || "fgs";
-      if (!map[k]) map[k] = [];
-      map[k].push(r);
-    });
-    return map;
-  }
-
-  function moduleCountMap(rows) {
-    var grouped = groupByModule(rows);
-    var out = {};
-    FIVE_MODULES.forEach(function (m) {
-      out[m.key] = (grouped[m.key] || []).length;
-    });
-    return out;
-  }
-
-  function lastSummary(last) {
-    if (!last) return "还没测过";
-    return historySummary(Object.assign({ module: last.module }, last));
-  }
-
-  function scanPhotoUrl(s) {
-    s = s || {};
-    if (s.imageUrl) return s.imageUrl;
-    if (s.image_path) return photoSrc(String(s.image_path).split(",")[0]);
-    return "";
-  }
-
-  function scanResultDetailHtml(s) {
-    s = s || {};
-    var html = "";
-    var photo = scanPhotoUrl(s);
-    if (photo) {
-      html += '<div class="history-result-photo"><img src="' + escapeHtml(photo) +
-        '" alt="检测照片" data-preview="' + escapeHtml(photo) + '"></div>';
-    }
-    var chips = [];
-    if (s.module === "fgs") {
-      chips.push("疼痛总分 " + (s.total_score || 0) + "/18");
-      if (s.pain_level) chips.push(String(s.pain_level));
-    } else if (s.module === "stool") {
-      chips.push("普瑞纳 " + (s.fecal_score || 0) + "/7");
-    } else if (s.module === "teeth") {
-      chips.push("牙龈炎 GI " + (s.fecal_score || 0) + "/3");
-      chips.push("牙结石 CI " + (s.body_score || 0) + "/3");
-    } else if (s.module === "postop" && s.pain_level) {
-      chips.push("伤口 " + s.pain_level);
-    } else if (s.module === "vomit" && s.pain_level) {
-      chips.push(String(s.pain_level));
-    }
-    if (s.confidence) chips.push("置信 " + s.confidence);
-    if (chips.length) {
-      html += '<div class="history-score-chips">' + chips.map(function (c) {
-        return '<span class="history-score-chip">' + escapeHtml(c) + "</span>";
-      }).join("") + "</div>";
-    }
-    if (s.module === "fgs") {
-      html += '<div class="history-dim-grid">' + FGS_DIMS.map(function (pair) {
-        return '<div class="history-dim"><span>' + pair[1] + "</span><strong>" +
-          escapeHtml(s[pair[0]] || 0) + "/2</strong></div>";
-      }).join("") + "</div>";
-    }
-    if (s.diagnosis) {
-      html += '<div><div class="answered-label">测出来的大概结果</div><div class="answered-text">' +
-        escapeHtml(s.diagnosis) + "</div></div>";
-    }
-    if (s.advice) {
-      html += '<div><div class="answered-label">AI 建议</div><div class="answered-text">' +
-        escapeHtml(s.advice) + "</div></div>";
-    }
-    var ctx = s.catContextItems || parseCatContext(s.cat_context);
-    if (ctx && ctx.length) {
-      html += '<div><div class="answered-label">用户填写的情况</div>' + ctxListHtml(ctx) + "</div>";
-    }
-    if (!html) {
-      html = '<p class="doc-empty">这条记录没有更细的文字结果</p>';
-    }
-    return html;
-  }
-
-  function scanRecordCardHtml(s) {
-    var open = !!state.clientScanOpen[s.id];
-    var photo = scanPhotoUrl(s);
-    var img = photo
-      ? '<img class="history-thumb" src="' + escapeHtml(photo) + '" alt="">'
-      : '<div class="history-thumb"></div>';
-    var inner = '<button type="button" class="history-card-head" data-toggle-client-scan="' + escapeHtml(s.id) + '">' +
-      img +
-      '<div class="history-meta"><span class="history-summary">' + escapeHtml(historySummary(s)) + "</span>" +
-      '<span class="history-date">' + escapeHtml(formatTime(s.created_at)) + "</span></div>" +
-      '<span class="history-open-hint">' + (open ? "收起" : "点开看结果") + "</span>" +
-      '<span class="history-arrow">›</span></button>';
-    if (open) {
-      inner += '<div class="history-detail">' + scanResultDetailHtml(s) + "</div>";
-    }
-    return '<div class="history-card' + (open ? " is-open" : "") + '">' + inner + "</div>";
-  }
-
   function formatTime(ts) {
     if (!ts) return "";
     var d = new Date(Number(ts) * 1000);
@@ -449,68 +171,30 @@
     return "未知";
   }
 
-  function parseCatContext(raw) {
-    if (!raw) return [];
-    var obj = null;
-    try { obj = JSON.parse(raw); } catch (e) {}
-    if (!obj || typeof obj !== "object") {
-      return [{ label: "用户备注", value: String(raw) }];
-    }
-    var items = [];
-    var seen = {};
-    CTX_ORDER.forEach(function (k) {
-      var v = obj[k];
-      if (v && String(v).trim()) {
-        items.push({ label: CTX_LABELS[k] || k, value: String(v).trim() });
-        seen[k] = true;
-      }
-    });
-    Object.keys(obj).forEach(function (k) {
-      if (seen[k]) return;
-      var v = obj[k];
-      if (v && String(v).trim()) {
-        items.push({ label: CTX_LABELS[k] || k, value: String(v).trim() });
-      }
-    });
-    return items;
+  function typeLabel(type) {
+    return (TYPE_META[type] || TYPE_META.fgs).label;
   }
 
-  function yellowJudgmentLine(days) {
-    return "🟡 建议 " + days + " 天内去医院";
+  function avatarFallback(name, kind) {
+    var initial = String(name || (kind === "cat" ? "猫" : "医")).slice(0, 1);
+    var bg = kind === "cat" ? "#C8A07E" : "#2A5F9E";
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+      '<rect width="64" height="64" rx="32" fill="' + bg + '"/>' +
+      '<text x="32" y="42" text-anchor="middle" fill="#fff" font-size="28" font-family="sans-serif">' +
+      escapeHtml(initial) +
+      "</text></svg>";
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   }
 
-  function composeDoctorComment(form) {
-    var judgment = "";
-    if (form.level === "green") judgment = LEVEL_LINES.green;
-    else if (form.level === "red") judgment = LEVEL_LINES.red;
-    else if (form.level === "yellow") judgment = yellowJudgmentLine(form.yellowDays || "2");
-    else return "";
-    var lines = ["我的判断:", judgment, "", "观察什么 / 去医院做什么:", (form.action || "").trim()];
-    var note = (form.note || "").trim();
-    if (note) lines.push("", "补充:", note);
-    return lines.join("\n");
+  function doctorAvatar(info) {
+    info = info || {};
+    return info.avatar_url ? uploadUrl(info.avatar_url) : avatarFallback(info.name, "doctor");
   }
 
-  function parseDoctorComment(text) {
-    var raw = String(text || "").trim();
-    if (!raw || raw.indexOf("我的判断") < 0) return null;
-    var judgment = "";
-    var action = "";
-    var note = "";
-    var level = "";
-    var jMatch = raw.match(/我的判断[:：]\s*\n?\s*([^\n]+)/);
-    if (jMatch) {
-      judgment = jMatch[1].trim();
-      if (judgment.indexOf("🟢") >= 0) level = "green";
-      else if (judgment.indexOf("🟡") >= 0) level = "yellow";
-      else if (judgment.indexOf("🔴") >= 0) level = "red";
-    }
-    var aMatch = raw.match(/观察什么\s*\/\s*去医院做什么[:：]\s*\n?([\s\S]*?)(?=\n\s*补充[:：]|$)/);
-    if (aMatch) action = aMatch[1].trim();
-    var nMatch = raw.match(/\n\s*补充[:：]\s*\n?([\s\S]*)$/);
-    if (nMatch) note = nMatch[1].trim();
-    if (!judgment) return null;
-    return { judgment: judgment, action: action, note: note, level: level };
+  function catAvatar(cat) {
+    cat = cat || {};
+    return cat.avatar_url ? uploadUrl(cat.avatar_url) : avatarFallback(cat.name, "cat");
   }
 
   function token() {
@@ -547,9 +231,7 @@
           err.code = 401;
           throw err;
         }
-        if (!res.ok) {
-          throw new Error((data && data.detail) || "请求失败");
-        }
+        if (!res.ok) throw new Error((data && data.detail) || "请求失败");
         return data;
       });
     });
@@ -565,6 +247,109 @@
     return false;
   }
 
+  function persistDemo() {
+    if (!state.demo) return;
+    try {
+      sessionStorage.setItem(DEMO_KEY, JSON.stringify({
+        records: state.records,
+        archive: state.archive,
+        plans: state.plans,
+        settings: state.settings,
+        doctor: state.doctor
+      }));
+    } catch (e) {}
+  }
+
+  function allRecords() {
+    return (state.records || []).concat(state.archive || []);
+  }
+
+  function findRecord(id) {
+    return allRecords().filter(function (r) { return String(r.id) === String(id); })[0] || null;
+  }
+
+  function findCat(id) {
+    return (state.cats || []).filter(function (c) { return c.id === id; })[0] || null;
+  }
+
+  function findOwner(id) {
+    return (state.owners || []).filter(function (o) { return o.id === id; })[0] || null;
+  }
+
+  function isRedline(rec) {
+    if (!rec) return false;
+    if (rec.is_redline) return true;
+    var hot = { blood: 1, vomit_3x: 1, lethargy: 1, abscess: 1, systemic: 1 };
+    return (rec.triggered_rules || []).some(function (k) { return hot[k]; });
+  }
+
+  function isFollowup(rec) {
+    return !!(rec && (rec.kind === "followup" || rec.unread_owner));
+  }
+
+  function queueGroups() {
+    var live = (state.records || []).filter(function (r) { return !r.done; });
+    var redline = [];
+    var red = [];
+    var follow = [];
+    var yellow = [];
+    var green = [];
+    live.forEach(function (r) {
+      if (r.pain_level === "vet" && isRedline(r)) redline.push(r);
+      else if (r.pain_level === "vet") red.push(r);
+      else if (isFollowup(r)) follow.push(r);
+      else if (r.pain_level === "observe") yellow.push(r);
+      else green.push(r);
+    });
+    var byTime = function (a, b) { return (b.created_at || 0) - (a.created_at || 0); };
+    redline.sort(byTime);
+    red.sort(byTime);
+    follow.sort(byTime);
+    yellow.sort(byTime);
+    green.sort(byTime);
+    return { redline: redline, red: red, follow: follow, yellow: yellow, green: green };
+  }
+
+  function actionableList() {
+    var g = queueGroups();
+    return g.redline.concat(g.red, g.follow, g.yellow);
+  }
+
+  function nextActionable(exceptId) {
+    var list = actionableList();
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].id) !== String(exceptId || "")) return list[i];
+    }
+    return null;
+  }
+
+  function ruleLabel(key) {
+    var map = state.redlineRules || {};
+    return (map[key] && map[key].label) || key;
+  }
+
+  function ruleHot(key) {
+    var map = state.redlineRules || {};
+    if (map[key]) return !!map[key].hot;
+    return /blood|vomit_3x|lethargy|abscess|systemic/.test(key);
+  }
+
+  function yellowJudgmentLine(days) {
+    return "🟡 建议 " + days + " 天内去医院";
+  }
+
+  function composeDoctorComment(form) {
+    var judgment = "";
+    if (form.level === "green") judgment = LEVEL_LINES.green;
+    else if (form.level === "red") judgment = LEVEL_LINES.red;
+    else if (form.level === "yellow") judgment = yellowJudgmentLine(form.yellowDays || "2");
+    else return "";
+    var lines = ["我的判断:", judgment, "", "观察什么 / 去医院做什么:", (form.action || "").trim()];
+    var note = (form.note || "").trim();
+    if (note) lines.push("", "补充:", note);
+    return lines.join("\n");
+  }
+
   function showLogin() {
     $("view-login").hidden = false;
     $("view-work").hidden = true;
@@ -573,53 +358,859 @@
     stopRefresh();
   }
 
+  function doctorIntro(info) {
+    info = info || {};
+    var name = String(info.name || "医生").trim() || "医生";
+    var city = String(info.city || "").trim();
+    var hospital = String(info.hospital || "").trim();
+    var title = String(info.title || "").trim();
+    var place = [city, hospital].filter(Boolean).join(" · ");
+    return {
+      headline: place ? (place + "的" + name) : name,
+      place: place || "未填写城市和医院",
+      specialty: title || "未填写专业",
+      name: name
+    };
+  }
+
+  function renderToolbar() {
+    var info = state.doctor || {};
+    var intro = doctorIntro(info);
+    $("toolbar-name").textContent = intro.headline;
+    $("toolbar-place").textContent = intro.place;
+    $("toolbar-title").textContent = intro.specialty;
+    var img = $("toolbar-avatar");
+    img.src = doctorAvatar(info);
+    img.alt = intro.name;
+    var n = Number(info.client_count || (state.owners && state.owners.length) || 0);
+    var cc = $("client-count");
+    if (n > 0) {
+      cc.hidden = false;
+      cc.textContent = String(n);
+    } else {
+      cc.hidden = true;
+    }
+  }
+
+  function updateTabCounts() {
+    var actionN = actionableList().length;
+    var todoEl = $("todo-count");
+    if (actionN > 0) {
+      todoEl.hidden = false;
+      todoEl.textContent = String(actionN);
+    } else {
+      todoEl.hidden = true;
+    }
+    var askN = (state.records || []).filter(function (r) {
+      return (r.thread || []).some(function (m) { return m.role === "owner"; });
+    }).length;
+    var askEl = $("ask-count");
+    if (askN > 0) {
+      askEl.hidden = false;
+      askEl.textContent = String(askN);
+    } else {
+      askEl.hidden = true;
+    }
+  }
+
   function showSection(section) {
     state.section = section;
-    if (section === "clients") {
-      state.scope = "mine";
-    } else if (section === "consult-mine") {
-      state.scope = "mine";
-    } else {
-      state.scope = "platform";
-    }
     document.querySelectorAll(".doc-main-tabs .doc-tab").forEach(function (t) {
       t.classList.toggle("is-active", t.getAttribute("data-section") === section);
     });
+    $("pane-todo").hidden = section !== "todo";
     $("pane-clients").hidden = section !== "clients";
-    $("pane-consult").hidden = section === "clients";
-    var mine = section === "consult-mine";
-    $("consult-platform-tabs").hidden = section !== "consult-platform";
-    $("inbox-cats").hidden = !mine;
-    $("consult-list").hidden = mine;
-    if (!mine) {
-      $("inbox-board").hidden = true;
-      var emptyP = $("detail-empty");
-      if (emptyP) {
-        var p = emptyP.querySelector("p");
-        var span = emptyP.querySelector("span");
-        if (p) p.textContent = "从左侧选择一条咨询";
-        if (span) span.textContent = "诊所客户能看到全家猫档案；平台问诊仍只看这一条。";
+    $("pane-ask").hidden = section !== "ask";
+    $("pane-settings").hidden = section !== "settings";
+    if (section === "todo") {
+      if (state.demo) renderTodo();
+      else loadTodo();
+    } else if (section === "clients") loadClients();
+    else if (section === "ask") renderAsk();
+    else renderSettings();
+  }
+
+  function showWork() {
+    $("view-login").hidden = true;
+    $("view-work").hidden = false;
+    var banner = $("demo-banner");
+    if (banner) banner.hidden = !state.demo;
+    renderToolbar();
+    if (!state.demo) startRefresh();
+    showSection(state.section || "todo");
+  }
+
+  function cloneSeed() {
+    var seed = window.DEMO_SEED;
+    return JSON.parse(JSON.stringify(seed));
+  }
+
+  function applySeed(seed, extra) {
+    extra = extra || {};
+    state.doctor = extra.doctor || seed.doctor;
+    state.owners = seed.owners;
+    state.cats = seed.cats;
+    state.records = extra.records || seed.records;
+    state.archive = extra.archive || seed.archive;
+    state.phrases = seed.phrases;
+    state.overrideReasons = seed.overrideReasons;
+    state.redlineRules = seed.redlineRules;
+    state.planTemplate = seed.planTemplate;
+    state.settings = extra.settings || seed.settings;
+    state.plans = extra.plans || {};
+    if (state.doctor) state.doctor.client_count = seed.owners.length;
+  }
+
+  function enterDemo() {
+    state.demo = true;
+    state.section = "todo";
+    state.current = null;
+    state.clientCurrent = null;
+    state.askCurrent = null;
+    state.reply = Object.assign({}, EMPTY_REPLY);
+    var seed = cloneSeed();
+    var saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(DEMO_KEY) || "null"); } catch (e) {}
+    applySeed(seed, saved || {});
+    showWork();
+  }
+
+  function whyLine(rec) {
+    if (isRedline(rec)) {
+      return (rec.triggered_rules || []).map(ruleLabel).join(" · ") || "红线触发";
+    }
+    if (isFollowup(rec)) return "主人追问，挂在这条记录上";
+    if (rec.type === "teeth" && rec.raw_scores && rec.raw_scores.suspected_tr) return "疑似牙吸收，须探诊";
+    if (rec.type === "stool" && rec.raw_scores && rec.raw_scores.fecal_score === 4) return "4分·按观察处理";
+    if (rec.type === "fgs" && rec.raw_scores) {
+      var s = rec.raw_scores;
+      var bits = [];
+      if ((s.orbital_tightening || 0) >= 2) bits.push("眼部紧缩 2 分");
+      if ((s.posture || 0) >= 2) bits.push("姿态 2 分");
+      return bits.length ? bits.join(" + ") + " 拉高" : ("疼痛 " + (s.total || 0) + "/18");
+    }
+    if (rec.diagnosis) return String(rec.diagnosis).slice(0, 28);
+    return typeLabel(rec.type);
+  }
+
+  function todoCardHtml(rec, extraCta) {
+    var tier = rec.pain_level || "good";
+    var cls = "todo-item is-" + tier + (state.current && state.current.id === rec.id ? " is-active" : "") +
+      (isRedline(rec) ? " is-redline" : "");
+    var cta = extraCta || (tier === "vet" ? "待处理" : (isFollowup(rec) ? "追问" : "待查看"));
+    return '<button type="button" class="' + cls + '" data-record="' + escapeHtml(rec.id) + '">' +
+      '<span class="todo-tier is-' + tier + '">' + escapeHtml(TIER_TEXT[tier] || "") + "</span>" +
+      '<div class="todo-item-body"><div class="todo-item-title">' +
+      escapeHtml((rec.cat_name || "猫咪") + " · " + typeLabel(rec.type)) + "</div>" +
+      '<div class="todo-item-sub">' + escapeHtml((rec.owner_alias || "") + " · " + formatTime(rec.created_at)) + "</div>" +
+      '<div class="todo-item-why">' + escapeHtml(whyLine(rec)) + "</div></div>" +
+      '<span class="todo-item-cta">' + escapeHtml(cta) + "</span></button>";
+  }
+
+  function renderTodo() {
+    updateTabCounts();
+    var g = queueGroups();
+    var action = actionableList();
+    var list = $("todo-list");
+    var loading = $("todo-loading");
+    if (loading) loading.hidden = true;
+    var progress = $("todo-progress");
+    if (!(state.records || []).length) {
+      progress.textContent = "";
+      list.innerHTML = "";
+      var empty = $("review-empty");
+      var body = $("review-body");
+      body.hidden = true;
+      empty.hidden = false;
+      $("review-pane").classList.remove("is-open");
+      empty.querySelector("p").textContent = "今天还没有待办";
+      empty.querySelector("span").textContent = "客户检测进来后，会按红 / 黄 / 绿排在这里。";
+      return;
+    }
+    if (!action.length && !g.green.length) {
+      progress.textContent = "";
+      list.innerHTML = '<p class="doc-empty">队列空了</p>';
+      renderCleared();
+      return;
+    }
+    progress.textContent = action.length
+      ? ("还剩 " + action.length + " 条要处理" + (g.green.length ? " · " + g.green.length + " 条绿档已折叠" : ""))
+      : (g.green.length + " 条绿档，可一键已阅");
+    var html = "";
+    g.redline.concat(g.red).forEach(function (r) { html += todoCardHtml(r, isRedline(r) ? "红线 · 置顶" : "待处理"); });
+    g.follow.forEach(function (r) { html += todoCardHtml(r, "新追问"); });
+    g.yellow.forEach(function (r) { html += todoCardHtml(r, "待查看"); });
+    if (g.green.length) {
+      html += '<div class="green-fold"><div class="green-fold-head"><div><strong>' +
+        g.green.length + " 条绿档</strong><span>正常，折叠不打扰</span></div>" +
+        '<div class="green-fold-actions">' +
+        '<button type="button" class="doc-btn-ghost" id="btn-toggle-green">' +
+        (state.greenOpen ? "收起" : "展开") + "</button>" +
+        '<button type="button" class="doc-btn-primary is-compact" id="btn-read-greens">全部已阅</button>' +
+        "</div></div>";
+      if (state.greenOpen) {
+        html += '<div class="green-fold-list">' + g.green.map(function (r) {
+          return todoCardHtml(r, "已阅也可点开");
+        }).join("") + "</div>";
       }
+      html += "</div>";
     }
-    if (section === "clients") {
-      loadClients();
-    } else if (mine) {
-      closeDetail();
-      loadInbox();
+    list.innerHTML = html;
+    if (!state.current) renderReviewEmpty();
+    else renderReview();
+  }
+
+  function renderCleared() {
+    $("review-empty").hidden = true;
+    $("review-body").hidden = false;
+    $("review-pane").classList.add("is-open");
+    $("review-body").innerHTML =
+      '<div class="cleared-state"><div class="cleared-mark">✓</div>' +
+      "<p>今日已清空</p><span>红黄都处理完了，绿档也已阅。可以去看客户档案。</span></div>";
+  }
+
+  function renderReviewEmpty() {
+    var empty = $("review-empty");
+    var body = $("review-body");
+    var pane = $("review-pane");
+    body.hidden = true;
+    empty.hidden = false;
+    pane.classList.remove("is-open");
+    var p = empty.querySelector("p");
+    var span = empty.querySelector("span");
+    if (p) p.textContent = "从左侧点开一条";
+    if (span) span.textContent = "红档先看，黄档待查看，绿档折叠不打扰。";
+  }
+
+  function photosHtml(photos) {
+    photos = (photos || []).slice(0, 4);
+    if (!photos.length) return "";
+    var cols = Math.min(2, photos.length);
+    return '<div class="review-photos" style="grid-template-columns:repeat(' + cols + ',1fr)">' +
+      photos.map(function (p) {
+        var src = photoSrc(p.path);
+        return '<div class="review-photo" data-preview="' + escapeHtml(src) + '">' +
+          '<img src="' + escapeHtml(src) + '" alt="" data-preview="' + escapeHtml(src) + '">' +
+          (p.when ? "<span>" + escapeHtml(p.when) + "</span>" : "") + "</div>";
+      }).join("") + "</div>";
+  }
+
+  function dimBarsHtml(pairs, scores) {
+    return pairs.map(function (pair) {
+      var v = Number((scores && scores[pair[0]]) || 0);
+      var hot = v >= 2;
+      var pct = Math.max(6, Math.round((v / 2) * 100));
+      return '<div class="dim-bar-row' + (hot ? " is-hot" : "") + '">' +
+        '<span class="dim-bar-name">' + escapeHtml(pair[1]) + "</span>" +
+        '<div class="dim-bar-track"><div class="dim-bar-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="dim-bar-val">' + v + "/2</span></div>";
+    }).join("");
+  }
+
+  function reasonHtml(rec) {
+    var type = rec.type || "fgs";
+    var s = rec.raw_scores || {};
+    var tier = rec.pain_level || "good";
+    var html = '<section class="reason-box"><h3>进档理由</h3>';
+    if (type === "fgs") {
+      html += '<div class="reason-hero is-' + tier + '"><strong>' + (s.total || 0) +
+        "<em>/18</em></strong><span>" + escapeHtml(TIER_TEXT[tier] + " · 18 分制") + "</span></div>";
+      html += '<div class="dim-group-label">面部 5 项</div>' + dimBarsHtml(FGS_FACE, s);
+      html += '<div class="dim-group-label">体态 4 项</div>' + dimBarsHtml(FGS_BODY, s);
+      if (s.brachy_adjusted) {
+        html += '<div class="brachy-note">扁脸基线已修正。这次拉高的是高分项，不是品种脸型。</div>';
+      }
+    } else if (type === "teeth") {
+      var gi = s.gi || 0;
+      var ci = s.ci || 0;
+      html += '<div class="teeth-nums"><div class="teeth-num"><em>牙龈炎 GI</em><strong>' + gi +
+        "</strong><span>/3</span></div><div class=\"teeth-num\"><em>牙结石 CI</em><strong>" + ci +
+        "</strong><span>/3</span></div><div class=\"teeth-num\"><em>合计</em><strong>" + (gi + ci) +
+        "</strong><span>GI+CI</span></div></div>";
+      if (s.suspected_tr) {
+        html += '<p class="forl-alert">疑似牙吸收（FORL/TR）——必须探诊确认</p>';
+      }
+    } else if (type === "stool") {
+      var fs = s.fecal_score || 0;
+      html += '<div class="reason-hero is-' + tier + '"><strong>' + fs +
+        "<em>/7</em></strong><span>普瑞纳分</span></div>";
+      var recent = s.recent || [fs];
+      html += '<div class="dim-group-label">近 5 次分数</div><div class="spark-row">' +
+        recent.map(function (n, i) {
+          var last = i === recent.length - 1;
+          var hot = n >= 6 || n <= 1;
+          var h = Math.max(8, Math.round((n / 7) * 44));
+          return '<div class="spark-col' + (last ? " is-last" : "") + (hot ? " is-hot" : "") +
+            '"><i style="height:' + h + 'px"></i><span>' + n + "</span></div>";
+        }).join("") + "</div>";
+      if (fs === 4 && tier === "observe") {
+        html += '<div class="rule-tags"><span class="rule-tag">4分·按观察处理</span></div>';
+      }
+    } else if (type === "vomit") {
+      var tags = [
+        { k: "颜色", v: s.color, hot: /血|咖啡/.test(s.color || "") },
+        { k: "内容物", v: s.content, hot: /异物/.test(s.content || "") },
+        { k: "类型", v: s.event, hot: false },
+        { k: "24h 次数", v: s.count_24h != null ? (s.count_24h + " 次") : "", hot: (s.count_24h || 0) >= 3 }
+      ];
+      html += '<div class="feature-tags">' + tags.filter(function (t) { return t.v; }).map(function (t) {
+        return '<span class="feature-tag' + (t.hot ? " is-hot" : "") + '">' +
+          escapeHtml(t.k + " · " + t.v) + "</span>";
+      }).join("") + "</div>";
+    } else if (type === "postop") {
+      html += '<div class="wound-rule"><strong>分型：</strong>' +
+        escapeHtml(s.wound_label || s.wound_type || "未分型") + "</div>";
+      (s.rules || []).forEach(function (line) {
+        html += '<div class="wound-rule">' + escapeHtml(line) + "</div>";
+      });
+    }
+    var rules = rec.triggered_rules || [];
+    if (rules.length && type !== "stool") {
+      html += '<div class="rule-tags" style="margin-top:0.7rem">' + rules.map(function (k) {
+        return '<span class="rule-tag' + (ruleHot(k) ? " is-hot" : "") + '">' + escapeHtml(ruleLabel(k)) + "</span>";
+      }).join("") + "</div>";
+    } else if (rules.length && type === "stool") {
+      html += '<div class="rule-tags" style="margin-top:0.55rem">' + rules.map(function (k) {
+        return '<span class="rule-tag' + (ruleHot(k) ? " is-hot" : "") + '">' + escapeHtml(ruleLabel(k)) + "</span>";
+      }).join("") + "</div>";
+    }
+    if (rec.diagnosis) {
+      html += '<div class="detail-text" style="margin-top:0.7rem">' + escapeHtml(rec.diagnosis) + "</div>";
+    }
+    html += "</section>";
+    return html;
+  }
+
+  function historyCompareHtml(rec) {
+    var rows = allRecords().filter(function (r) {
+      return r.cat_id === rec.cat_id && r.type === rec.type && r.id !== rec.id;
+    }).sort(function (a, b) { return (b.created_at || 0) - (a.created_at || 0); }).slice(0, 4);
+    var html = '<section class="reason-box"><h3>历史对比</h3>';
+    if (!rows.length) {
+      html += '<p class="doc-empty" style="padding:0.6rem 0">这只猫还没有同类型的更早记录</p></section>';
+      return html;
+    }
+    html += '<div class="history-list">' + rows.map(function (r) {
+      var photo = r.photos && r.photos[0] ? photoSrc(r.photos[0].path) : "";
+      var sum = whyLine(r);
+      if (r.type === "stool" && r.raw_scores) sum = "普瑞纳 " + (r.raw_scores.fecal_score || 0) + "/7";
+      if (r.type === "fgs" && r.raw_scores) sum = "疼痛 " + (r.raw_scores.total || 0) + "/18";
+      if (r.type === "teeth" && r.raw_scores) sum = "GI " + (r.raw_scores.gi || 0) + " · CI " + (r.raw_scores.ci || 0);
+      var stamp = r.doctor_action ? '<span class="history-current-tag">医生已回</span>' : "";
+      return '<div class="history-card"><div class="history-card-head">' +
+        (photo ? '<img class="history-thumb" src="' + escapeHtml(photo) + '" alt="" data-preview="' + escapeHtml(photo) + '">' : '<div class="history-thumb"></div>') +
+        '<div class="history-meta"><div class="history-meta-row">' + stamp + "</div>" +
+        '<span class="history-summary">' + escapeHtml(sum) + "</span>" +
+        '<span class="history-date">' + escapeHtml(formatTime(r.created_at) + " · " + (TIER_TEXT[r.pain_level] || "")) +
+        "</span></div></div></div>";
+    }).join("") + "</div></section>";
+    return html;
+  }
+
+  function ctxHtml(ctx) {
+    if (!ctx || typeof ctx !== "object") return "";
+    var keys = Object.keys(ctx).filter(function (k) { return ctx[k]; });
+    if (!keys.length) return "";
+    var labels = {
+      photo_state: "拍照时", appetite: "食欲", water: "饮水", activity: "活动量",
+      stool: "便便", abnormal: "异常", vomit_event_type: "事件类型",
+      wound_type: "伤口来源", postop_day: "术后第几天", surgery_type: "手术",
+      surgery_name: "具体手术"
+    };
+    return '<section class="reason-box"><h3>主人填写</h3><div class="ctx-list">' +
+      keys.map(function (k) {
+        return '<div class="ctx-item"><span class="ctx-item-label">' + escapeHtml(labels[k] || k) +
+          '</span><span class="ctx-item-value">' + escapeHtml(ctx[k]) + "</span></div>";
+      }).join("") + "</div></section>";
+  }
+
+  function threadClosed(rec) {
+    var thread = rec.thread || [];
+    var last = 0;
+    thread.forEach(function (m) {
+      if (m.role === "doctor" || m.role === "owner") last = Math.max(last, m.at || 0);
+    });
+    if (!last) last = rec.created_at || 0;
+    if (Date.now() / 1000 - last > 48 * 3600) return "timeout";
+    var doctorAt = 0;
+    thread.forEach(function (m) {
+      if (m.role === "doctor" && m.kind !== "supplement") doctorAt = Math.max(doctorAt, m.at || 0);
+    });
+    var ownerRounds = 0;
+    thread.forEach(function (m) {
+      if (m.role === "owner" && (m.at || 0) > doctorAt) ownerRounds += 1;
+    });
+    if (ownerRounds >= 2 && rec.doctor_action) return "rounds";
+    return "";
+  }
+
+  function threadHtml(rec) {
+    var thread = rec.thread || [];
+    var html = '<section class="reason-box"><h3>记录上的对话</h3><div class="thread-list">';
+    if (!thread.length) {
+      html += '<div class="thread-msg is-system"><div class="thread-text">还没有对话。你的回复会挂在这条记录上，不是另开聊天窗。</div></div>';
+    }
+    thread.forEach(function (m) {
+      var who = m.role === "owner" ? (rec.owner_alias || "主人")
+        : m.role === "doctor" ? ((m.kind === "supplement" ? "补充说明" : "你的回复") + (m.locked ? " · 不可改" : ""))
+        : "系统";
+      html += '<div class="thread-msg is-' + escapeHtml(m.role) + '"><div class="thread-who">' +
+        escapeHtml(who + " · " + formatTime(m.at)) + '</div><div class="thread-text">' +
+        escapeHtml(m.text) + "</div></div>";
+    });
+    html += "</div>";
+    var closed = threadClosed(rec);
+    if (closed) {
+      html += '<div class="thread-exits"><span class="thread-exit">拍新检测</span>' +
+        '<span class="thread-exit">发起问诊</span><span class="thread-exit">来院</span></div>' +
+        '<p class="doc-empty" style="padding:0.5rem 0 0">已' +
+        (closed === "timeout" ? "超过 48 小时" : "满 2 轮追问") + "，出口只有上面三个。</p>";
+    } else if (rec.doctor_action) {
+      html += '<div class="reply-field" style="margin-top:0.7rem"><div class="reply-field-head">' +
+        '<span class="reply-opt">不限次</span><span class="reply-field-label">＋补充说明</span></div>' +
+        '<textarea class="reply-input" id="reply-supplement" maxlength="300" placeholder="补充不会覆盖原回复，留痕不可改"></textarea>' +
+        '<button type="button" class="doc-btn-ghost" id="btn-supplement" style="margin-top:0.5rem">写下补充</button></div>';
+    }
+    html += "</section>";
+    return html;
+  }
+
+  function phrasesFor(type) {
+    var map = state.phrases || {};
+    return map[type] || map.fgs || [];
+  }
+
+  function replyHtml(rec) {
+    if (rec.done && rec.doctor_action) {
+      var a = rec.doctor_action;
+      var line = a.level === "green" ? LEVEL_LINES.green
+        : a.level === "red" ? LEVEL_LINES.red
+        : yellowJudgmentLine(a.yellowDays || "2");
+      return '<section class="reply-section"><h3>已回复</h3>' +
+        '<div class="answered-card"><div class="answered-block"><span class="answered-label">我的判断</span>' +
+        '<div class="answered-judgment is-' + escapeHtml(a.level) + '">' + escapeHtml(line) + "</div></div>" +
+        (a.action ? '<div class="answered-block"><span class="answered-label">观察 / 就医</span><div class="answered-text">' +
+          escapeHtml(a.action) + "</div></div>" : "") +
+        (a.note ? '<div class="answered-block"><span class="answered-label">补充</span><div class="answered-text">' +
+          escapeHtml(a.note) + "</div></div>" : "") +
+        "</div></section>";
+    }
+    var form = state.reply;
+    var phrases = phrasesFor(rec.type);
+    var html = '<section class="reply-section"><h3>三键回复</h3><div class="tri-keys">';
+    html += '<button type="button" class="tri-key' + (form.level === "green" ? " is-green" : "") +
+      '" data-level="green">在家观察</button>';
+    html += '<button type="button" class="tri-key' + (form.level === "yellow" ? " is-yellow" : "") +
+      '" data-level="yellow">建议来院</button>';
+    html += '<button type="button" class="tri-key' + (form.level === "red" ? " is-red" : "") +
+      '" data-level="red">请来院</button></div>';
+    if (form.level === "yellow") {
+      html += '<div class="days-row"><span class="days-label">几天内来院</span><div class="days-chips">';
+      html += DAY_OPTIONS.map(function (d) {
+        return '<button type="button" class="days-chip' + (form.yellowDays === d ? " is-active" : "") +
+          '" data-days="' + d + '">' + d + "天</button>";
+      }).join("") + "</div></div>";
+    }
+    if (phrases.length) {
+      html += '<div class="quick-chips" style="margin-top:0.75rem">' + phrases.map(function (line, i) {
+        return '<button type="button" class="quick-chip" data-quick="' + i + '">' + escapeHtml(line) + "</button>";
+      }).join("") + "</div>";
+    }
+    html += '<textarea class="reply-input" id="reply-action" maxlength="120" placeholder="一句话：观察重点或来院做什么">' +
+      escapeHtml(form.action) + "</textarea>";
+    html += '<textarea class="reply-input" id="reply-note" maxlength="300" placeholder="可选补充，最多 300 字" style="margin-top:0.5rem;min-height:64px">' +
+      escapeHtml(form.note) + "</textarea>";
+    html += '<button type="button" class="doc-btn-primary reply-submit" id="btn-submit-reply"' +
+      (state.submitting ? " disabled" : "") + ">" +
+      (state.submitting ? "提交中..." : "发送并下一条") + "</button></section>";
+    return html;
+  }
+
+  function reviewHtml(rec) {
+    var cat = findCat(rec.cat_id) || { name: rec.cat_name, breed: "", gender: "", neutered: 0 };
+    var age = catAgeText(cat.birth_date);
+    var meta = [cat.breed || "品种未填", genderText(cat.gender), cat.neutered ? "已绝育" : "未绝育"];
+    if (age) meta.push(age);
+    if (cat.weight) meta.push(cat.weight + " kg");
+    var tier = rec.pain_level || "good";
+    var html = '<div class="review-close-bar"><strong>' + escapeHtml((rec.cat_name || "猫咪") + " · " + typeLabel(rec.type)) +
+      '</strong><button type="button" class="doc-btn-ghost" id="btn-close-review">返回队列</button></div>';
+    html += '<div class="doc-detail"><div class="detail-head">' +
+      '<img class="detail-cat-avatar" src="' + escapeHtml(catAvatar(cat)) + '" alt="">' +
+      "<div><div class=\"detail-cat-name\">" + escapeHtml(rec.cat_name || "猫咪") + "</div>" +
+      '<div class="detail-cat-meta">' + escapeHtml(meta.join(" · ")) + " · 主人 " +
+      escapeHtml(rec.owner_alias || "") + "</div>";
+    if (rec.owner_phone) {
+      html += '<a class="phone-btn" href="tel:' + escapeHtml(rec.owner_phone) + '">打电话给主人</a>';
+    }
+    html += "</div></div>";
+    html += '<div class="review-tier-row"><span class="review-tier-badge is-' + tier + '">' +
+      escapeHtml((TIER_TEXT[tier] || "") + " · " + (isRedline(rec) ? "红线触发" : TIER_HINT[tier])) +
+      '</span><button type="button" class="override-link" id="btn-open-override">调整档位</button></div>';
+    if (rec.doctor_override) {
+      html += '<div class="override-note">已从 ' + escapeHtml(TIER_TEXT[rec.doctor_override.from] || "") +
+        " 改为 " + escapeHtml(TIER_TEXT[rec.doctor_override.to] || "") +
+        " · " + escapeHtml(rec.doctor_override.reason_label || "") + "</div>";
+    }
+    html += photosHtml(rec.photos);
+    html += reasonHtml(rec);
+    html += ctxHtml(rec.cat_context);
+    html += historyCompareHtml(rec);
+    html += threadHtml(rec);
+    html += replyHtml(rec);
+    html += '<div class="urgent-foot">情况紧急？不要等回复，直接就医。</div></div>';
+    return html;
+  }
+
+  function reviewMount() {
+    if (state.fromAsk) {
+      return { empty: $("ask-detail-empty"), body: $("ask-detail-body"), pane: $("ask-detail-pane") };
+    }
+    return { empty: $("review-empty"), body: $("review-body"), pane: $("review-pane") };
+  }
+
+  function renderReview() {
+    var rec = state.current;
+    var mount = reviewMount();
+    if (!rec) {
+      if (mount.body) mount.body.hidden = true;
+      if (mount.empty) mount.empty.hidden = false;
+      if (mount.pane) mount.pane.classList.remove("is-open");
+      return;
+    }
+    if (mount.empty) mount.empty.hidden = true;
+    if (mount.body) {
+      mount.body.hidden = false;
+      mount.body.innerHTML = reviewHtml(rec);
+    }
+    if (mount.pane) mount.pane.classList.add("is-open");
+  }
+
+  function openReview(id, fromAsk) {
+    var rec = findRecord(id);
+    if (!rec) return;
+    state.current = rec;
+    state.fromAsk = !!fromAsk;
+    state.reply = Object.assign({}, EMPTY_REPLY);
+    if (fromAsk) {
+      state.askCurrent = rec;
+      renderAsk();
     } else {
-      closeDetail();
-      loadList();
+      renderTodo();
     }
+    renderReview();
+  }
+
+  function closeReview() {
+    var id = state.current && state.current.id;
+    state.current = null;
+    state.reply = Object.assign({}, EMPTY_REPLY);
+    if (state.fromAsk) {
+      state.fromAsk = false;
+      state.askCurrent = null;
+      renderAsk();
+      return;
+    }
+    renderTodo();
+    if (id) {
+      var el = document.querySelector('[data-record="' + id + '"]');
+      if (el) el.classList.remove("is-active");
+    }
+  }
+
+  function submitReply() {
+    if (state.submitting || !state.current) return;
+    var form = state.reply;
+    if (!form.level) return toast("先点一个键：观察 / 建议来院 / 请来院");
+    if (form.level === "yellow") {
+      var days = parseInt(form.yellowDays, 10);
+      if (!days) return toast("选一下几天内来院");
+    }
+    if (!(form.action || "").trim()) return toast("用上面的短语，或写一句给主人");
+    var rec = state.current;
+    var comment = composeDoctorComment(form);
+    if (state.demo) {
+      rec.done = true;
+      rec.unread_owner = false;
+      rec.kind = "record";
+      rec.doctor_action = {
+        level: form.level,
+        yellowDays: form.yellowDays,
+        action: (form.action || "").trim(),
+        note: (form.note || "").trim(),
+        at: Math.floor(Date.now() / 1000)
+      };
+      rec.thread = rec.thread || [];
+      rec.thread.push({
+        id: "doc-" + Date.now(),
+        role: "doctor",
+        text: comment,
+        at: rec.doctor_action.at,
+        locked: true
+      });
+      persistDemo();
+      toast(form.level === "red" ? "已请来院，下一条" : "已发送，下一条");
+      var next = nextActionable(rec.id);
+      state.reply = Object.assign({}, EMPTY_REPLY);
+      if (next) openReview(next.id, state.fromAsk);
+      else {
+        state.current = null;
+        if (state.fromAsk) renderAsk();
+        else renderTodo();
+      }
+      return;
+    }
+    if (rec.consultation_id) {
+      state.submitting = true;
+      renderReview();
+      api("/api/v1/doctor/consultations/" + encodeURIComponent(rec.consultation_id) + "/reply", "POST", { comment: comment })
+        .then(function () {
+          state.submitting = false;
+          rec.done = true;
+          toast("回复已发送");
+          var next = nextActionable(rec.id);
+          if (next) openReview(next.id);
+          else {
+            state.current = null;
+            loadTodo();
+          }
+        })
+        .catch(function (err) {
+          state.submitting = false;
+          renderReview();
+          if (handleAuthError(err)) return;
+          toast(networkMessage(err, "提交失败"));
+        });
+      return;
+    }
+    rec.done = true;
+    toast("这条没有问诊单，已在本地标为已处理");
+    var nxt = nextActionable(rec.id);
+    if (nxt) openReview(nxt.id);
+    else {
+      state.current = null;
+      renderTodo();
+    }
+  }
+
+  function markGreensRead() {
+    (state.records || []).forEach(function (r) {
+      if (!r.done && r.pain_level === "good") r.done = true;
+    });
+    persistDemo();
+    toast("绿档已全部已阅");
+    if (state.current && state.current.pain_level === "good") state.current = null;
+    renderTodo();
+  }
+
+  function openOverride() {
+    if (!state.current) return;
+    var cur = state.current.pain_level || "good";
+    var order = ["vet", "observe", "good"];
+    var idx = order.indexOf(cur);
+    var lowers = order.slice(idx + 1);
+    if (!lowers.length) return toast("已经是绿档，不能再往下调");
+    state.overrideDraft = { level: lowers[0], reason: "" };
+    var box = $("override-levels");
+    box.innerHTML = lowers.map(function (lv) {
+      return '<button type="button" class="level-item' + (state.overrideDraft.level === lv ? " is-" + (lv === "good" ? "green" : lv === "observe" ? "yellow" : "red") : "") +
+        '" data-override-level="' + lv + '"><span></span><span>改为' + TIER_TEXT[lv] +
+        (lv === "good" ? "（正常）" : lv === "observe" ? "（待查看）" : "") + "</span></button>";
+    }).join("");
+    $("override-reasons").innerHTML = (state.overrideReasons || []).map(function (r) {
+      return '<button type="button" class="doc-chip" data-override-reason="' + escapeHtml(r.id) + '">' +
+        escapeHtml(r.label) + "</button>";
+    }).join("");
+    $("override-mask").hidden = false;
+  }
+
+  function paintOverrideModal() {
+    document.querySelectorAll("#override-levels .level-item").forEach(function (btn) {
+      var lv = btn.getAttribute("data-override-level");
+      btn.className = "level-item" + (state.overrideDraft.level === lv
+        ? (lv === "good" ? " is-green" : lv === "observe" ? " is-yellow" : " is-red")
+        : "");
+    });
+    document.querySelectorAll("#override-reasons .doc-chip").forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.getAttribute("data-override-reason") === state.overrideDraft.reason);
+    });
+  }
+
+  function saveOverride() {
+    var rec = state.current;
+    if (!rec) return;
+    if (!state.overrideDraft.level) return toast("选一个下调后的档位");
+    if (!state.overrideDraft.reason) return toast("选一个改档原因");
+    var reason = (state.overrideReasons || []).filter(function (r) {
+      return r.id === state.overrideDraft.reason;
+    })[0];
+    rec.doctor_override = {
+      from: rec.ai_pain_level || rec.pain_level,
+      to: state.overrideDraft.level,
+      reason: state.overrideDraft.reason,
+      reason_label: reason ? reason.label : "",
+      at: Math.floor(Date.now() / 1000)
+    };
+    rec.pain_level = state.overrideDraft.level;
+    persistDemo();
+    $("override-mask").hidden = true;
+    toast("档位已改，这条会留下训练标注");
+    renderTodo();
+    renderReview();
+  }
+
+  function addSupplement() {
+    var rec = state.current;
+    if (!rec) return;
+    var box = $("reply-supplement");
+    var text = box ? String(box.value || "").trim() : "";
+    if (!text) return toast("写一句补充");
+    rec.thread = rec.thread || [];
+    rec.thread.push({
+      id: "sup-" + Date.now(),
+      role: "doctor",
+      kind: "supplement",
+      text: text,
+      at: Math.floor(Date.now() / 1000),
+      locked: true
+    });
+    persistDemo();
+    toast("补充已留下，不可改");
+    renderReview();
+  }
+
+  function renderAsk() {
+    updateTabCounts();
+    var items = (state.records || []).filter(function (r) {
+      return (r.thread || []).some(function (m) { return m.role === "owner"; });
+    });
+    var list = $("ask-list");
+    var empty = $("ask-empty");
+    if (!items.length) {
+      list.innerHTML = "";
+      empty.hidden = false;
+      empty.textContent = "主人点「问医生」会落到最近一条记录的对话里。问诊单是下一期，现在先用记录线程。";
+    } else {
+      empty.hidden = true;
+      list.innerHTML = items.map(function (r) {
+        return todoCardHtml(r, r.unread_owner ? "待回" : "已回");
+      }).join("");
+    }
+    if (state.askCurrent) {
+      state.current = state.askCurrent;
+      state.fromAsk = true;
+      renderReview();
+    } else {
+      $("ask-detail-empty").hidden = false;
+      $("ask-detail-body").hidden = true;
+      $("ask-detail-pane").classList.remove("is-open");
+    }
+  }
+
+  function demoStats() {
+    var all = allRecords();
+    var handled = all.filter(function (r) { return r.doctor_action; });
+    var redYellow = all.filter(function (r) { return r.pain_level === "vet" || r.pain_level === "observe" || r.ai_pain_level === "vet" || r.ai_pain_level === "observe"; });
+    var intercept = redYellow.length;
+    var come = handled.filter(function (r) { return r.doctor_action && r.doctor_action.level === "red"; }).length;
+    var override = all.filter(function (r) { return r.doctor_override; }).length;
+    var actionable = all.filter(function (r) {
+      return (r.ai_pain_level || r.pain_level) !== "good" || r.doctor_action;
+    });
+    return {
+      intercept: intercept,
+      come: come,
+      override: override,
+      overrideDen: Math.max(1, actionable.length),
+      plans: Object.keys(state.plans || {}).length
+    };
+  }
+
+  function renderSettings() {
+    var info = state.doctor || {};
+    var code = info.referral_code || "";
+    var stats = state.demo ? demoStats() : null;
+    var html = '<div class="settings-wrap">';
+    if (stats) {
+      html += '<section class="settings-card"><h3>今日仪表（演示）</h3><div class="settings-stat-grid">' +
+        '<div class="settings-stat"><em>红黄拦截</em><strong>' + stats.intercept + "</strong></div>" +
+        '<div class="settings-stat"><em>请来院发出</em><strong>' + stats.come + "</strong></div>" +
+        '<div class="settings-stat"><em>跟诊计划</em><strong>' + stats.plans + "</strong></div>" +
+        '<div class="settings-stat"><em>医生覆盖</em><strong>' + stats.override + "/" + stats.overrideDen + "</strong></div>" +
+        "</div></section>";
+    }
+    html += '<section class="settings-card"><h3>推荐码</h3>';
+    if (code) {
+      html += '<div class="doc-referral-label">给你客户的推荐码</div><strong id="referral-code" style="font-size:1.5rem;letter-spacing:0.12em">' +
+        escapeHtml(code) + "</strong>" +
+        '<div class="doc-referral-hint" style="margin:0.35rem 0 0.7rem">他们用这个码进九龄猫，检测会回到你的「我的客户」。</div>' +
+        '<div class="doc-toolbar-actions"><button type="button" class="doc-btn-ghost" id="btn-copy-code">复制推荐码</button>' +
+        '<button type="button" class="doc-btn-ghost" id="btn-copy-link">复制链接</button></div>';
+    } else {
+      html += '<p class="doc-empty" style="padding:0.4rem 0">登录后可以看到你的推荐码。</p>';
+    }
+    html += "</section>";
+    html += '<section class="settings-card"><h3>快捷短语 · 按检测类型预置</h3><p class="doc-modal-lead">先用这套，自定义短语下一期。</p>';
+    ["fgs", "stool", "vomit", "teeth", "postop"].forEach(function (k) {
+      html += '<div class="phrase-group"><h4>' + escapeHtml(typeLabel(k)) + "</h4><div class=\"quick-chips\">" +
+        (phrasesFor(k).map(function (line) {
+          return '<span class="quick-chip" style="cursor:default">' + escapeHtml(line) + "</span>";
+        }).join("") || '<span class="doc-empty">暂无</span>') + "</div></div>";
+    });
+    html += "</section>";
+    html += '<section class="settings-card"><h3>通知</h3>';
+    [
+      ["notify_red", "红档推送"],
+      ["notify_yellow", "黄档提醒"],
+      ["notify_followup", "主人追问"]
+    ].forEach(function (row) {
+      var on = !!(state.settings && state.settings[row[0]]);
+      html += '<div class="toggle-row"><span>' + row[1] + '</span><button type="button" class="' +
+        (on ? "is-on" : "") + '" data-toggle="' + row[0] + '">' + (on ? "开" : "关") + "</button></div>";
+    });
+    html += "</section></div>";
+    $("pane-settings").innerHTML = html;
+  }
+
+  function copyText(text, okMsg) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast(okMsg); }).catch(function () {
+        window.prompt("复制：", text);
+      });
+    } else {
+      window.prompt("复制：", text);
+    }
+  }
+
+  function buildDemoClients() {
+    var q = (state.clientSearch || "").trim();
+    return (state.owners || []).map(function (o) {
+      var oCats = (state.cats || []).filter(function (c) { return c.owner_id === o.id; });
+      var pending = (state.records || []).filter(function (r) {
+        return r.owner_id === o.id && !r.done && r.pain_level !== "good";
+      }).length;
+      return {
+        user_id: o.id,
+        alias: o.alias,
+        nickname: o.nickname,
+        avatar_url: "",
+        cat_count: oCats.length,
+        cat_names: oCats.map(function (c) { return c.name; }).join("、"),
+        pending_count: pending,
+        bound_at: o.bound_at,
+        phone: o.phone
+      };
+    }).filter(function (c) {
+      if (!q) return true;
+      return (c.alias + c.nickname + c.cat_names).indexOf(q) >= 0;
+    });
   }
 
   function loadClients() {
     if (state.demo) {
       $("client-loading").hidden = true;
-      var q = (state.clientSearch || "").trim();
-      state.clients = DEMO.clients.filter(function (c) {
-        if (!q) return true;
-        return (c.alias + c.nickname + c.cat_names).indexOf(q) >= 0;
-      });
+      state.clients = buildDemoClients();
       renderClients();
       return;
     }
@@ -637,166 +1228,13 @@
     });
   }
 
-  function loadInbox() {
-    if (state.demo) {
-      state.inboxLoading = false;
-      $("list-loading").hidden = true;
-      $("list-empty").hidden = true;
-      state.inboxBuckets = DEMO.inbox.buckets;
-      state.pendingCount = DEMO.inbox.pending_count;
-      if (!state.inboxBucket) state.inboxBucket = "ask";
-      renderInbox();
-      return;
-    }
-    state.inboxLoading = true;
-    $("list-loading").hidden = false;
-    $("list-empty").hidden = true;
-    $("inbox-board").hidden = true;
-    return api("/api/v1/doctor/inbox").then(function (res) {
-      state.inboxBuckets = (res && res.buckets) || [];
-      state.pendingCount = Number((res && res.pending_count) || 0);
-      state.inboxLoading = false;
-      $("list-loading").hidden = true;
-      if (!state.inboxBucket && state.inboxBuckets.length) {
-        var pick = state.inboxBuckets.find(function (b) { return b.owner_count > 0 && b.key !== "ok"; })
-          || state.inboxBuckets.find(function (b) { return b.owner_count > 0; });
-        state.inboxBucket = pick ? pick.key : (state.inboxBuckets[0] && state.inboxBuckets[0].key) || "";
-      }
-      renderInbox();
-    }).catch(function (err) {
-      state.inboxLoading = false;
-      $("list-loading").hidden = true;
-      if (handleAuthError(err)) return;
-      toast(networkMessage(err, "加载问诊失败"));
-    });
-  }
-
-  function currentInboxBucket() {
-    return (state.inboxBuckets || []).find(function (b) { return b.key === state.inboxBucket; }) || null;
-  }
-
-  function renderInbox() {
-    var countEl = $("pending-count");
-    if (state.pendingCount > 0) {
-      countEl.hidden = false;
-      countEl.textContent = String(state.pendingCount);
-    } else {
-      countEl.hidden = true;
-    }
-    var list = $("inbox-cats");
-    list.innerHTML = (state.inboxBuckets || []).map(function (b) {
-      var active = state.inboxBucket === b.key ? " is-active" : "";
-      var emptyCls = (b.owner_count ? "" : " is-empty");
-      return '<button type="button" class="inbox-cat' + active + emptyCls + '" data-inbox="' + escapeHtml(b.key) + '">' +
-        '<span class="inbox-dot is-' + escapeHtml(b.color) + '"></span>' +
-        '<span class="inbox-cat-text"><strong>' + escapeHtml(String(b.owner_count || 0)) + " 位主人</strong>" +
-        "<span>" + escapeHtml(b.sub || "") + "</span></span>" +
-        '<span class="inbox-cat-action">' + escapeHtml(b.action || "") + "</span></button>";
-    }).join("");
-    $("list-empty").hidden = true;
-    if (state.current) return;
-    renderInboxBoard();
-  }
-
-  function evidenceCardHtml(card) {
-    var photos = (card.photos || []).slice(0, 3);
-    var cols = Math.min(3, Math.max(1, photos.length));
-    var photoHtml = photos.length
-      ? '<div class="evidence-photos" style="grid-template-columns:repeat(' + cols + ',1fr)">' + photos.map(function (p) {
-          var src = photoSrc(p.path);
-          return '<div class="evidence-photo" data-preview="' + escapeHtml(src) + '"><img src="' + escapeHtml(src) + '" alt="" data-preview="' + escapeHtml(src) + '">' +
-            '<span class="evidence-photo-when">' + escapeHtml(p.when || "") + "</span></div>";
-        }).join("") + "</div>"
-      : "";
-    var owner = card.owner_alias || card.owner_nickname || "";
-    return '<button type="button" class="evidence-card" data-inbox-card="' + escapeHtml(card.id) + '">' +
-      '<div class="evidence-head">' + escapeHtml((card.cat_name || "猫咪") + " · " + (card.module_label || "检测记录")) + "</div>" +
-      photoHtml +
-      '<div class="evidence-body">' +
-      '<span class="evidence-badge is-' + escapeHtml(card.tier || "") + '">' + escapeHtml(card.badge || "") + "</span>" +
-      '<div class="evidence-summary">' + escapeHtml(card.summary || "") + "</div>" +
-      (owner ? '<div class="evidence-owner">主人 ' + escapeHtml(owner) + "</div>" : "") +
-      "</div></button>";
-  }
-
-  function renderInboxBoard() {
-    var board = $("inbox-board");
-    var empty = $("detail-empty");
-    var body = $("detail-body");
-    var pane = $("detail-pane");
-    body.hidden = true;
-    var bucket = currentInboxBucket();
-    if (!bucket) {
-      board.hidden = true;
-      empty.hidden = false;
-      empty.querySelector("p").textContent = "从左侧选择一类情况";
-      empty.querySelector("span").textContent = "绿档不用回，红档已提示到院，黄档是主人专门问你的。";
-      pane.classList.remove("is-open");
-      $("list-empty").hidden = true;
-      return;
-    }
-    var cards = bucket.cards || [];
-    if (!cards.length) {
-      board.hidden = true;
-      empty.hidden = false;
-      empty.querySelector("p").textContent = "这一类暂时没有记录";
-      empty.querySelector("span").textContent = bucket.action || "";
-      pane.classList.remove("is-open");
-      return;
-    }
-    empty.hidden = true;
-    board.hidden = false;
-    board.innerHTML = '<div class="inbox-board">' + cards.map(evidenceCardHtml).join("") + "</div>";
-    pane.classList.add("is-open");
-    $("list-empty").hidden = true;
-  }
-
-  function openInboxCard(cardId) {
-    var bucket = currentInboxBucket();
-    if (!bucket) return;
-    var card = (bucket.cards || []).find(function (c) { return String(c.id) === String(cardId); });
-    if (!card) return;
-    if (card.consultation_id) {
-      state.fromInbox = true;
-      if (state.demo) {
-        state.current = decorateRecord(JSON.parse(JSON.stringify(DEMO.consult)));
-        state.reply = Object.assign({}, EMPTY_REPLY);
-        state.history = [];
-        state.historyOpen = {};
-        state.historyModule = "vomit";
-        $("inbox-board").hidden = true;
-        renderDetail();
-        loadHistory(DEMO.consult.id);
-        return;
-      }
-      api("/api/v1/doctor/consultations/" + encodeURIComponent(card.consultation_id)).then(function (rec) {
-        state.current = decorateRecord(rec);
-        state.reply = Object.assign({}, EMPTY_REPLY);
-        state.history = [];
-        state.historyOpen = {};
-        state.historyModule = (rec.scan && rec.scan.module) || "fgs";
-        $("inbox-board").hidden = true;
-        renderDetail();
-        loadHistory(rec.id);
-      }).catch(function (err) {
-        if (handleAuthError(err)) return;
-        toast(networkMessage(err, "加载问诊失败"));
-      });
-      return;
-    }
-    if (card.user_id) {
-      showSection("clients");
-      openClient(card.user_id);
-    }
-  }
-
   function renderClients() {
     var list = $("client-list");
     var empty = $("client-empty");
     if (!state.clients.length) {
       list.innerHTML = "";
       empty.hidden = false;
-      empty.textContent = state.clientSearch ? "没有匹配的客户" : "还没有诊所客户。把上面的推荐码发给家长即可。";
+      empty.textContent = state.clientSearch ? "没有匹配的客户" : "还没有诊所客户。到「设置」复制推荐码发给家长。";
       return;
     }
     empty.hidden = true;
@@ -811,17 +1249,44 @@
           '<div class="doc-card-head">' +
             '<img class="card-avatar" src="' + escapeHtml(c.avatar_url ? uploadUrl(c.avatar_url) : avatarFallback(title, "doctor")) + '" alt="">' +
             '<div class="doc-card-names"><strong>' + escapeHtml(title) + "</strong>" +
-            '<span>' + escapeHtml(sub) + "</span></div>" +
-            (c.pending_count ? '<span class="doc-module-tag">待回复 ' + c.pending_count + "</span>" : "") +
+            "<span>" + escapeHtml(sub) + "</span></div>" +
+            (c.pending_count ? '<span class="doc-module-tag">待处理 ' + c.pending_count + "</span>" : "") +
           "</div></button>"
       );
     }).join("");
   }
 
+  function demoClientDetail(userId) {
+    var owner = findOwner(userId);
+    var oCats = (state.cats || []).filter(function (c) { return c.owner_id === userId; });
+    return {
+      cat_count: oCats.length,
+      user: {
+        id: owner.id,
+        nickname: owner.nickname,
+        alias: owner.alias,
+        display_name: owner.alias,
+        avatar_url: "",
+        bound_at: owner.bound_at,
+        phone: owner.phone
+      },
+      cats: oCats.map(function (cat) {
+        var scans = allRecords().filter(function (r) { return r.cat_id === cat.id; });
+        var modules = {};
+        ["fgs", "stool", "vomit", "teeth", "postop"].forEach(function (k) {
+          var list = scans.filter(function (r) { return r.type === k; })
+            .sort(function (a, b) { return (b.created_at || 0) - (a.created_at || 0); });
+          modules[k] = { count: list.length, last: list[0] || null };
+        });
+        return Object.assign({}, cat, { scan_count: scans.length, modules: modules, scans: scans });
+      })
+    };
+  }
+
   function openClient(userId) {
     state.aliasEditing = false;
     if (state.demo) {
-      state.clientCurrent = JSON.parse(JSON.stringify(DEMO.clientDetails[userId] || DEMO.clientDetails["demo-lixinran"]));
+      state.clientCurrent = demoClientDetail(userId);
       state.clientCat = null;
       state.clientCatModule = "";
       renderClients();
@@ -838,6 +1303,42 @@
       if (handleAuthError(err)) return;
       toast(networkMessage(err, "加载客户失败"));
     });
+  }
+
+  function historySummaryFromRec(r) {
+    if (!r) return "还没测过";
+    if (r.type === "fgs" && r.raw_scores) return "疼痛 " + (r.raw_scores.total || 0) + "/18";
+    if (r.type === "stool" && r.raw_scores) return "普瑞纳 " + (r.raw_scores.fecal_score || 0) + "/7";
+    if (r.type === "teeth" && r.raw_scores) return "GI " + (r.raw_scores.gi || 0) + " · CI " + (r.raw_scores.ci || 0);
+    if (r.type === "postop") return "伤口 " + (TIER_TEXT[r.pain_level] || r.pain_level || "");
+    return typeLabel(r.type);
+  }
+
+  function lastSummary(last) {
+    if (!last) return "还没测过";
+    if (last.raw_scores) return historySummaryFromRec(last);
+    if (last.module === "fgs" || last.total_score != null) return "疼痛 " + (last.total_score || 0) + "/18";
+    if (last.module === "stool" || last.fecal_score != null) return "普瑞纳 " + (last.fecal_score || 0) + "/7";
+    return "有记录";
+  }
+
+  function clientScanCardHtml(r) {
+    var open = !!state.clientScanOpen[r.id];
+    var photo = r.photos && r.photos[0] ? photoSrc(r.photos[0].path) : (r.image_path ? photoSrc(String(r.image_path).split(",")[0]) : "");
+    var img = photo ? '<img class="history-thumb" src="' + escapeHtml(photo) + '" alt="">' : '<div class="history-thumb"></div>';
+    var inner = '<button type="button" class="history-card-head" data-toggle-client-scan="' + escapeHtml(r.id) + '">' +
+      img + '<div class="history-meta"><span class="history-summary">' + escapeHtml(historySummaryFromRec(r) || typeLabel(r.type || r.module)) + "</span>" +
+      '<span class="history-date">' + escapeHtml(formatTime(r.created_at) + (r.doctor_action ? " · 医生已回" : "")) +
+      "</span></div><span class=\"history-open-hint\">" + (open ? "收起" : "点开") +
+      '</span><span class="history-arrow">›</span></button>';
+    if (open) {
+      inner += '<div class="history-detail">' + reasonHtml(r) +
+        (r.doctor_action ? '<div class="answered-card"><div class="answered-text">' +
+          escapeHtml(r.doctor_action.action || "") + "</div></div>" : "") +
+        '<button type="button" class="doc-btn-ghost" data-open-record="' + escapeHtml(r.id) +
+        '">在审阅页打开</button></div>';
+    }
+    return '<div class="history-card' + (open ? " is-open" : "") + '">' + inner + "</div>";
   }
 
   function renderClientDetail() {
@@ -870,41 +1371,44 @@
       "<div><div class=\"detail-cat-name-row\">" + nameHtml + "</div>" +
       '<div class="detail-cat-meta">家长 ' + escapeHtml(u.nickname || "") +
       " · 名下 " + (state.clientCurrent.cat_count || 0) + " 只猫 · 绑定于 " + escapeHtml(formatTime(u.bound_at)) +
-      "</div></div></div>";
+      "</div>";
+    if (u.phone) html += '<a class="phone-btn" href="tel:' + escapeHtml(u.phone) + '">打电话</a>';
+    html += "</div></div>";
     html += '<section class="detail-section"><h3>每只猫的五大检测</h3>';
     if (!cats.length) {
       html += '<p class="doc-empty">这位家长还没建猫咪档案</p>';
     } else {
       html += cats.map(function (cat) {
-        var selected = state.clientCat && state.clientCat.cat && state.clientCat.cat.id === cat.id;
+        var selected = state.clientCat && ((state.clientCat.cat && state.clientCat.cat.id) || state.clientCat.id) === cat.id;
         var meta = [cat.breed || "品种未填", cat.gender === "male" ? "公" : cat.gender === "female" ? "母" : "", cat.neutered ? "已绝育" : "未绝育"].filter(Boolean).join(" · ");
-        var tiles = FIVE_MODULES.map(function (m) {
-          var st = (cat.modules && cat.modules[m.key]) || { count: 0, last: null };
+        var tiles = ["fgs", "stool", "vomit", "teeth", "postop"].map(function (k) {
+          var st = (cat.modules && cat.modules[k]) || { count: 0, last: null };
           var count = Number(st.count || 0);
-          var focus = selected && state.clientCatModule === m.key;
+          var focus = selected && state.clientCatModule === k;
           return '<button type="button" class="module-tile' + (focus ? " is-active" : "") + (count ? "" : " is-empty") +
-            '" data-cat="' + escapeHtml(cat.id) + '" data-module="' + m.key + '">' +
-            "<strong>" + m.label + "</strong>" +
+            '" data-cat="' + escapeHtml(cat.id) + '" data-module="' + k + '">' +
+            "<strong>" + typeLabel(k) + "</strong>" +
             "<span>" + (count ? count + " 条" : "未测") + "</span>" +
             "<em>" + escapeHtml(count ? lastSummary(st.last) : "还没测过") + "</em></button>";
         }).join("");
         var panels = "";
         if (selected) {
-          var grouped = groupByModule(state.clientCat.scans || []);
-          var focusMod = state.clientCatModule || "";
-          var list = grouped[focusMod] || [];
-          var label = (FIVE_MODULES.find(function (m) { return m.key === focusMod; }) || {}).label || "检测";
-          panels = '<div class="module-panel">' +
-            "<h4>" + escapeHtml((state.clientCat.cat && state.clientCat.cat.name) || cat.name) + " · " + label +
-            " · " + list.length + " 条</h4>";
+          var scans = (state.clientCat && state.clientCat.scans) || cat.scans || [];
+          var list = scans.filter(function (r) { return (r.type || r.module) === state.clientCatModule; })
+            .sort(function (a, b) { return (b.created_at || 0) - (a.created_at || 0); });
+          var label = typeLabel(state.clientCatModule);
+          panels = '<div class="module-panel"><h4>' + escapeHtml(cat.name) + " · " + label + " · " + list.length + " 条</h4>";
           if (cat.medical_history) {
             panels += '<div class="detail-text">病史：' + escapeHtml(cat.medical_history) + "</div>";
           }
-          if (!list.length) {
-            panels += '<p class="doc-empty">这只猫还没有' + label + "检测</p>";
-          } else {
-            panels += '<div class="history-list">' + list.map(scanRecordCardHtml).join("") + "</div>";
+          if (state.plans[cat.id]) {
+            panels += '<div class="plan-chip">已开 · ' + escapeHtml(state.plans[cat.id].name) + "</div>";
+          } else if (cat.id === "c-zhima" || (cat.medical_history && /绝育|卵巢/.test(cat.medical_history))) {
+            panels += '<button type="button" class="doc-btn-primary is-compact" id="btn-open-plan" data-plan-cat="' +
+              escapeHtml(cat.id) + '" style="margin-top:0.55rem">开跟诊计划 · 绝育术后 14 天</button>';
           }
+          if (!list.length) panels += '<p class="doc-empty">这只猫还没有' + label + "检测</p>";
+          else panels += '<div class="history-list">' + list.map(clientScanCardHtml).join("") + "</div>";
           panels += "</div>";
         }
         return '<article class="cat-board' + (selected ? " is-open" : "") + '">' +
@@ -914,28 +1418,7 @@
           '<div class="module-tiles">' + tiles + "</div>" + panels + "</article>";
       }).join("");
     }
-    html += "</section>";
-    var consults = state.clientCurrent.consultations || [];
-    if (consults.length) {
-      html += '<section class="detail-section"><h3>问诊记录</h3>';
-      var byCat = {};
-      consults.forEach(function (c) {
-        var name = c.cat_name || "未归档";
-        if (!byCat[name]) byCat[name] = [];
-        byCat[name].push(c);
-      });
-      Object.keys(byCat).forEach(function (name) {
-        html += '<div class="consult-cat-group"><div class="consult-cat-label">' + escapeHtml(name) + "</div>";
-        html += byCat[name].map(function (c) {
-          return '<div class="ctx-item"><span class="ctx-item-label">' + escapeHtml(c.status === "pending" ? "待回复" : "已回复") +
-            "</span><span class=\"ctx-item-value\">" + escapeHtml(moduleLabel(c.module) + " · " + formatTime(c.created_at)) +
-            "</span></div>";
-        }).join("");
-        html += "</div>";
-      });
-      html += "</section>";
-    }
-    html += "</div>";
+    html += "</section></div>";
     body.innerHTML = html;
     if (state.aliasEditing) {
       var input = $("client-alias");
@@ -959,9 +1442,12 @@
     if (state.demo) {
       state.clientCurrent.user.alias = next;
       state.clientCurrent.user.display_name = next || state.clientCurrent.user.nickname;
-      DEMO.clients.forEach(function (c) {
-        if (c.user_id === uid) c.alias = next;
+      var owner = findOwner(uid);
+      if (owner) owner.alias = next;
+      (state.records || []).forEach(function (r) {
+        if (r.owner_id === uid) r.owner_alias = next;
       });
+      persistDemo();
       toast("示例里已改名（不会保存到服务器）");
       renderClients();
       renderClientDetail();
@@ -976,474 +1462,90 @@
     });
   }
 
-  function copyText(text, okMsg) {
-    if (!text) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () { toast(okMsg); }).catch(function () {
-        window.prompt("复制：", text);
-      });
-    } else {
-      window.prompt("复制：", text);
-    }
+  function openPlanModal(catId) {
+    state.planCatId = catId;
+    var cat = findCat(catId) || { name: "猫咪" };
+    var tpl = state.planTemplate;
+    $("plan-lead").textContent = (cat.name || "猫咪") + " · " + (tpl && tpl.name ? tpl.name : "绝育术后 14 天") +
+      "。主人会按节点收到拍照提醒。";
+    $("plan-body").innerHTML = ((tpl && tpl.items) || []).map(function (it) {
+      return '<div class="plan-step"><strong>' + escapeHtml(it.title) + "</strong><span>" +
+        escapeHtml(it.text) + "</span></div>";
+    }).join("");
+    $("plan-mask").hidden = false;
   }
 
-  function showWork() {
-    $("view-login").hidden = true;
-    $("view-work").hidden = false;
-    var banner = $("demo-banner");
-    if (banner) banner.hidden = !state.demo;
-    renderToolbar();
-    if (!state.demo) startRefresh();
-    showSection(state.section || "clients");
+  function savePlan() {
+    if (!state.planCatId) return;
+    var tpl = state.planTemplate || { id: "neuter-14", name: "绝育术后 14 天" };
+    state.plans[state.planCatId] = {
+      id: tpl.id,
+      name: tpl.name,
+      at: Math.floor(Date.now() / 1000)
+    };
+    persistDemo();
+    $("plan-mask").hidden = true;
+    toast("计划已发给主人（示例，不会真的推送）");
+    renderClientDetail();
   }
 
-  function enterDemo() {
-    state.demo = true;
-    state.doctor = DEMO.doctor;
-    state.section = "consult-mine";
-    state.inboxBucket = "ask";
-    state.current = null;
-    state.clientCurrent = null;
-    showWork();
-  }
-
-  function doctorIntro(info) {
-    info = info || {};
-    var name = String(info.name || "医生").trim() || "医生";
-    var city = String(info.city || "").trim();
-    var hospital = String(info.hospital || "").trim();
-    var title = String(info.title || "").trim();
-    var place = [city, hospital].filter(Boolean).join(" · ");
+  function mapInboxCard(card) {
+    var tier = card.tier || "good";
+    var blob = String(card.badge || "") + String(card.summary || "");
     return {
-      headline: place ? (place + "的" + name) : name,
-      place: place || "未填写城市和医院",
-      specialty: title || "未填写专业",
-      name: name
+      id: card.id,
+      cat_id: card.cat_id || card.id,
+      owner_id: card.user_id || "",
+      cat_name: card.cat_name,
+      owner_alias: card.owner_alias || card.owner_nickname || "",
+      type: card.module || "fgs",
+      pain_level: tier,
+      ai_pain_level: tier,
+      triggered_rules: /带血/.test(blob) ? ["blood"] : (/尿闭/.test(blob) ? ["systemic"] : []),
+      is_redline: /带血|尿闭|红线|急诊/.test(blob),
+      raw_scores: {},
+      photos: card.photos || [],
+      diagnosis: card.summary || "",
+      advice: "",
+      cat_context: {},
+      created_at: (card.photos && card.photos[0] && card.photos[0].created_at) || 0,
+      doctor_action: null,
+      doctor_override: null,
+      thread: card.consultation_id ? [{
+        id: "sys-" + card.id,
+        role: "system",
+        text: "主人从结果页点了「问医生」。",
+        at: (card.photos && card.photos[0] && card.photos[0].created_at) || 0
+      }] : [],
+      unread_owner: !!card.consultation_id,
+      kind: card.consultation_id ? "followup" : "record",
+      done: false,
+      consultation_id: card.consultation_id || "",
+      user_id: card.user_id || ""
     };
   }
 
-  function renderToolbar() {
-    var info = state.doctor || {};
-    var intro = doctorIntro(info);
-    $("toolbar-name").textContent = intro.headline;
-    $("toolbar-place").textContent = intro.place;
-    $("toolbar-title").textContent = intro.specialty;
-    var img = $("toolbar-avatar");
-    img.src = doctorAvatar(info);
-    img.alt = intro.name;
-    var code = info.referral_code || "";
-    $("referral-bar").hidden = !code;
-    $("referral-code").textContent = code || "————";
-    var n = Number(info.client_count || 0);
-    $("referral-count").textContent = n ? ("已绑定 " + n + " 位诊所客户") : "还没有绑定客户";
-    var cc = $("client-count");
-    if (n > 0) {
-      cc.hidden = false;
-      cc.textContent = String(n);
-    } else {
-      cc.hidden = true;
-    }
-  }
-
-  function decorateRecord(r) {
-    r.timeText = formatTime(r.created_at);
-    r.answeredTimeText = r.answered_at ? formatTime(r.answered_at) : "";
-    r.imageUrl = r.scan && r.scan.image_path ? photoSrc(String(r.scan.image_path).split(",")[0]) : "";
-    r.catContextItems = parseCatContext(r.scan && r.scan.cat_context);
-    r.parsedComment = parseDoctorComment(r.doctor_comment);
-    r.doctor_avatar_url = r.doctor_avatar ? uploadUrl(r.doctor_avatar) : "";
-    if (r.status === "answered" && !(r.doctor_name && String(r.doctor_name).trim())) {
-      var myId = String((state.doctor && state.doctor.id) || "");
-      if (myId && String(r.doctor_id || "") === myId && state.doctor && state.doctor.name) {
-        r.doctor_name = String(state.doctor.name).trim();
-      }
-    }
-    return r;
-  }
-
-  function loadList() {
+  function loadTodo() {
     if (state.demo) {
-      state.loading = false;
-      $("list-loading").hidden = true;
-      state.records = state.filter === "pending" ? [decorateRecord(JSON.parse(JSON.stringify(DEMO.consult)))] : [];
-      state.pendingCount = 1;
-      renderList();
+      renderTodo();
       return;
     }
-    state.loading = true;
-    $("list-loading").hidden = false;
-    $("list-empty").hidden = true;
-    var q = "/api/v1/doctor/consultations?status=" + encodeURIComponent(state.filter) +
-      "&scope=" + encodeURIComponent(state.scope);
-    var listP = api(q);
-    var countP = state.filter === "pending"
-      ? Promise.resolve(null)
-      : api("/api/v1/doctor/consultations?status=pending&scope=" + encodeURIComponent(state.scope));
-    return Promise.all([listP, countP]).then(function (results) {
-      var list = results[0] || {};
-      state.records = (list.records || []).map(decorateRecord);
-      if (state.filter === "pending") {
-        state.pendingCount = state.records.length;
-      } else if (results[1] && results[1].records) {
-        state.pendingCount = results[1].records.length;
-      }
-      state.loading = false;
-      renderList();
+    $("todo-loading").hidden = false;
+    return api("/api/v1/doctor/inbox").then(function (res) {
+      var rows = [];
+      ((res && res.buckets) || []).forEach(function (b) {
+        (b.cards || []).forEach(function (card) {
+          rows.push(mapInboxCard(card));
+        });
+      });
+      state.records = rows;
+      $("todo-loading").hidden = true;
+      renderTodo();
     }).catch(function (err) {
-      state.loading = false;
-      $("list-loading").hidden = true;
+      $("todo-loading").hidden = true;
       if (handleAuthError(err)) return;
-      toast(networkMessage(err, "加载失败"));
+      toast(networkMessage(err, "加载待办失败"));
     });
-  }
-
-  function renderList() {
-    $("list-loading").hidden = true;
-    var countEl = $("pending-count");
-    if (state.pendingCount > 0) {
-      countEl.hidden = false;
-      countEl.textContent = String(state.pendingCount);
-    } else {
-      countEl.hidden = true;
-    }
-    var empty = $("list-empty");
-    var list = $("consult-list");
-    if (!state.records.length) {
-      list.innerHTML = "";
-      empty.hidden = false;
-      empty.textContent = state.filter === "pending"
-        ? (state.scope === "mine" ? "暂无诊所客户的待回复" : "暂无平台待回复")
-        : "还没有已回复的记录";
-      return;
-    }
-    empty.hidden = true;
-    list.innerHTML = state.records.map(function (item) {
-      var active = state.current && state.current.id === item.id ? " is-active" : "";
-      var cta = state.filter === "pending" ? "回复 ›" : "已回复 ✓";
-      var doctorLine = state.filter === "answered" && item.doctor_name
-        ? '<div>' + escapeHtml(item.doctor_name) + (item.doctor_title ? " · " + escapeHtml(item.doctor_title) : "") + "</div>"
-        : "";
-      var scan = item.scan || {};
-      return (
-        '<button type="button" class="doc-card' + active + '" data-id="' + escapeHtml(item.id) + '">' +
-          '<div class="doc-card-head">' +
-            '<img class="card-avatar" src="' + escapeHtml(catAvatar(item.cat)) + '" alt="">' +
-            '<div class="doc-card-names">' +
-              "<strong>" + escapeHtml((item.cat && item.cat.name) || "猫咪") + "</strong>" +
-              "<span>来自 " + escapeHtml(item.owner_alias || item.owner_nickname || "用户") +
-              (item.cat_count ? " · 名下 " + item.cat_count + " 只猫" : "") + "</span>" +
-            "</div>" +
-            '<span class="doc-module-tag">' + escapeHtml(moduleLabel(scan.module)) + "</span>" +
-          "</div>" +
-          '<div class="doc-card-body">' +
-            '<div class="doc-card-summary">' + escapeHtml(scanSummary(scan)) + "</div>" +
-            (scan.diagnosis ? '<div class="doc-card-diag">' + escapeHtml(scan.diagnosis) + "</div>" : "") +
-          "</div>" +
-          '<div class="doc-card-foot">' +
-            "<div>" + escapeHtml(item.timeText) + doctorLine + "</div>" +
-            '<span class="doc-card-cta">' + cta + "</span>" +
-          "</div>" +
-        "</button>"
-      );
-    }).join("");
-  }
-
-  function ctxListHtml(items) {
-    if (!items || !items.length) return "";
-    return '<div class="ctx-list">' + items.map(function (it) {
-      return '<div class="ctx-item"><span class="ctx-item-label">' + escapeHtml(it.label) +
-        '</span><span class="ctx-item-value">' + escapeHtml(it.value) + "</span></div>";
-    }).join("") + "</div>";
-  }
-
-  function fgsRowsHtml(scan) {
-    return FGS_DIMS.map(function (pair) {
-      return '<div class="dim-row"><span class="dim-name">' + pair[1] +
-        '</span><span class="dim-val">' + escapeHtml(scan[pair[0]] || 0) + "/2</span></div>";
-    }).join("");
-  }
-
-  function actionPlaceholder() {
-    if (state.reply.level === "green") return "例如：留意精神、食欲、饮水是否正常";
-    if (state.reply.level === "yellow" || state.reply.level === "red") {
-      return "例如：建议查血常规 / 带上近期检测记录面诊";
-    }
-    return "一句话说明观察重点或就医事项";
-  }
-
-  function renderDetail() {
-    var empty = $("detail-empty");
-    var body = $("detail-body");
-    var pane = $("detail-pane");
-    if (!state.current) {
-      body.hidden = true;
-      if (state.section === "consult-mine") {
-        renderInboxBoard();
-        return;
-      }
-      empty.hidden = false;
-      pane.classList.remove("is-open");
-      return;
-    }
-    empty.hidden = true;
-    body.hidden = false;
-    pane.classList.add("is-open");
-    if ($("inbox-board")) $("inbox-board").hidden = true;
-    var rec = state.current;
-    var scan = rec.scan || {};
-    var cat = rec.cat || {};
-    var age = catAgeText(cat.birth_date);
-    var meta = [
-      cat.breed || "品种未填",
-      genderText(cat.gender),
-      cat.neutered ? "已绝育" : "未绝育"
-    ];
-    if (age) meta.push(age);
-    if (cat.weight) meta.push(cat.weight + " kg");
-
-    var html = '<div class="detail-close-bar' + (state.fromInbox ? " is-from-inbox" : "") + '">' +
-      "<strong>" + (state.fromInbox ? "问诊详情" : "咨询详情") + "</strong>" +
-      '<button type="button" class="doc-btn-ghost" id="btn-close-detail">' +
-      (state.fromInbox ? "返回记录" : "关闭") + "</button>" +
-      "</div><div class=\"doc-detail\">";
-
-    html += '<div class="detail-head">' +
-      '<img class="detail-cat-avatar" src="' + escapeHtml(catAvatar(cat)) + '" alt="">' +
-      "<div><div class=\"detail-cat-name\">" + escapeHtml(cat.name || "猫咪") + "</div>" +
-      '<div class="detail-cat-meta">' + escapeHtml(meta.join(" · ")) + "</div></div></div>";
-
-    if (rec.imageUrl) {
-      html += '<div class="detail-photo"><img src="' + escapeHtml(rec.imageUrl) +
-        '" alt="检测照片" data-preview="' + escapeHtml(rec.imageUrl) + '"></div>';
-    }
-
-    if (scan.module === "fgs") {
-      html += '<section class="detail-section"><h3>疼痛评分 ' +
-        escapeHtml(scan.total_score || 0) + "/18</h3>" + fgsRowsHtml(scan) + "</section>";
-    }
-
-    if (scan.diagnosis) {
-      html += '<section class="detail-section"><h3>AI 初判</h3><div class="detail-text">' +
-        escapeHtml(scan.diagnosis) + "</div></section>";
-    }
-    if (scan.advice) {
-      html += '<section class="detail-section"><h3>AI 建议</h3><div class="detail-text">' +
-        escapeHtml(scan.advice) + "</div></section>";
-    }
-    if (rec.catContextItems && rec.catContextItems.length) {
-      html += '<section class="detail-section"><h3>用户填写的情况</h3>' +
-        ctxListHtml(rec.catContextItems) + "</section>";
-    }
-
-    html += '<section class="detail-section"><div class="history-head"><h3>这只猫的五大检测</h3></div>';
-    if (state.historyLoading) {
-      html += '<p class="doc-empty">正在加载...</p>';
-    } else {
-      var counts = moduleCountMap(state.history);
-      var histMod = state.historyModule || (scan.module || "fgs");
-      html += '<div class="module-tiles module-tiles-compact">' + FIVE_MODULES.map(function (m) {
-        var n = counts[m.key] || 0;
-        return '<button type="button" class="module-tile' + (histMod === m.key ? " is-active" : "") + (n ? "" : " is-empty") +
-          '" data-history-module="' + m.key + '"><strong>' + m.label + "</strong><span>" +
-          (n ? n + " 条" : "未测") + "</span></button>";
-      }).join("") + "</div>";
-      var histList = groupByModule(state.history)[histMod] || [];
-      var histLabel = (FIVE_MODULES.find(function (m) { return m.key === histMod; }) || {}).label || "检测";
-      html += '<div class="module-panel"><h4>' + histLabel + " · " + histList.length + " 条</h4>";
-      if (!histList.length) {
-        html += '<p class="doc-empty">这只猫还没有' + histLabel + "记录</p>";
-      } else {
-        html += '<div class="history-list">' + histList.map(function (item) {
-          var open = !!state.historyOpen[item.id];
-          var cls = "history-card" + (item.is_current ? " is-current" : "") + (open ? " is-open" : "");
-          var inner = '<button type="button" class="history-card-head" data-toggle-history="' + escapeHtml(item.id) + '">' +
-            (item.imageUrl
-              ? '<img class="history-thumb" src="' + escapeHtml(item.imageUrl) + '" alt="">'
-              : '<div class="history-thumb"></div>') +
-            '<div class="history-meta"><div class="history-meta-row">' +
-            (item.is_current ? '<span class="history-current-tag">本次</span>' : "") +
-            '</div><span class="history-summary">' + escapeHtml(item.summary) + "</span>" +
-            '<span class="history-date">' + escapeHtml(item.dateText) + "</span></div>" +
-            '<span class="history-open-hint">' + (open ? "收起" : "点开看结果") + "</span>" +
-            '<span class="history-arrow">›</span></button>';
-          if (open) {
-            inner += '<div class="history-detail">' + scanResultDetailHtml(item) + "</div>";
-          }
-          return '<div class="' + cls + '">' + inner + "</div>";
-        }).join("") + "</div>";
-      }
-      html += "</div>";
-    }
-    html += "</section>";
-
-    if (rec.status === "pending") {
-      var form = state.reply;
-      html += '<section class="reply-section"><h3>给用户的回复</h3>';
-      html += '<div class="reply-field"><div class="reply-field-head"><span class="reply-req">必选</span>' +
-        '<span class="reply-field-label">我的判断</span></div><div class="level-list">';
-      html += '<button type="button" class="level-item' + (form.level === "green" ? " is-green" : "") +
-        '" data-level="green"><span>🟢</span><span>先在家观察,暂时不用去医院</span></button>';
-      html += '<button type="button" class="level-item' + (form.level === "yellow" ? " is-yellow" : "") +
-        '" data-level="yellow"><span>🟡</span><span>建议 __ 天内去医院</span></button>';
-      html += '<button type="button" class="level-item' + (form.level === "red" ? " is-red" : "") +
-        '" data-level="red"><span>🔴</span><span>建议今天就去</span></button></div>';
-      if (form.level === "yellow") {
-        html += '<div class="days-row"><span class="days-label">几天内就医</span><div class="days-chips">';
-        html += DAY_OPTIONS.map(function (d) {
-          return '<button type="button" class="days-chip' + (form.yellowDays === d ? " is-active" : "") +
-            '" data-days="' + d + '">' + d + "天</button>";
-        }).join("") + "</div></div>";
-      }
-      html += "</div>";
-
-      html += '<div class="reply-field"><div class="reply-field-head"><span class="reply-req">必选</span>' +
-        '<span class="reply-field-label">观察什么 / 去医院做什么</span></div>';
-      if (state.quickReplies.length) {
-        html += '<div class="quick-chips">' + state.quickReplies.map(function (line, i) {
-          return '<button type="button" class="quick-chip" data-quick="' + i + '">' + escapeHtml(line) + "</button>";
-        }).join("") + "</div>";
-      }
-      html += '<textarea class="reply-input" id="reply-action" maxlength="120" placeholder="' +
-        escapeHtml(actionPlaceholder()) + '">' + escapeHtml(form.action) + "</textarea></div>";
-
-      html += '<div class="reply-field"><div class="reply-field-head"><span class="reply-opt">可选</span>' +
-        '<span class="reply-field-label">补充</span></div>' +
-        '<textarea class="reply-input" id="reply-note" maxlength="300" placeholder="可补充更细节的建议，最多 300 字">' +
-        escapeHtml(form.note) + "</textarea></div>";
-
-      html += '<button type="button" class="doc-btn-primary reply-submit" id="btn-submit-reply"' +
-        (state.submitting ? " disabled" : "") + ">" +
-        (state.submitting ? "提交中..." : "提交回复") + "</button></section>";
-    } else {
-      var parsed = rec.parsedComment;
-      var who = String(rec.doctor_id || "") === String((state.doctor && state.doctor.id) || "")
-        ? "你的回复"
-        : (rec.doctor_name ? rec.doctor_name + " 的回复" : "医生回复");
-      html += '<section class="reply-section"><h3>' + escapeHtml(who) + "</h3>";
-      html += '<div class="answered-doctor-row">' +
-        (rec.doctor_avatar_url ? '<img class="answered-doc-avatar" src="' + escapeHtml(rec.doctor_avatar_url) + '" alt="">' : "") +
-        "<div><strong>" + escapeHtml(rec.doctor_name || "未知医生") +
-        (rec.doctor_title ? " · " + escapeHtml(rec.doctor_title) : "") + "</strong>" +
-        (rec.answeredTimeText ? '<div class="history-date">回复于 ' + escapeHtml(rec.answeredTimeText) + "</div>" : "") +
-        "</div></div>";
-      if (parsed) {
-        html += '<div class="answered-card"><div class="answered-block"><span class="answered-label">我的判断</span>' +
-          '<div class="answered-judgment is-' + escapeHtml(parsed.level) + '">' + escapeHtml(parsed.judgment) + "</div></div>";
-        if (parsed.action) {
-          html += '<div class="answered-block"><span class="answered-label">观察什么 / 去医院做什么</span>' +
-            '<div class="answered-text">' + escapeHtml(parsed.action) + "</div></div>";
-        }
-        if (parsed.note) {
-          html += '<div class="answered-block"><span class="answered-label">补充</span>' +
-            '<div class="answered-text">' + escapeHtml(parsed.note) + "</div></div>";
-        }
-        html += "</div>";
-      } else {
-        html += '<div class="answered-card"><div class="answered-text">' + escapeHtml(rec.doctor_comment || "") + "</div></div>";
-      }
-      html += "</section>";
-    }
-
-    html += "</div>";
-    body.innerHTML = html;
-  }
-
-  function openDetail(id) {
-    var rec = state.records.find(function (r) { return r.id === id; });
-    if (!rec) return;
-    state.current = rec;
-    state.reply = Object.assign({}, EMPTY_REPLY);
-    state.history = [];
-    state.historyOpen = {};
-    state.historyModule = (rec.scan && rec.scan.module) || "fgs";
-    renderList();
-    renderDetail();
-    loadHistory(rec.id);
-  }
-
-  function closeDetail() {
-    state.current = null;
-    state.reply = Object.assign({}, EMPTY_REPLY);
-    state.history = [];
-    state.historyOpen = {};
-    state.historyModule = "";
-    if (state.section === "consult-mine") {
-      state.fromInbox = false;
-      renderInbox();
-      return;
-    }
-    state.fromInbox = false;
-    renderList();
-    renderDetail();
-  }
-
-  function loadHistory(cid) {
-    if (state.demo) {
-      state.historyLoading = false;
-      state.history = DEMO.history.map(function (r) {
-        var row = JSON.parse(JSON.stringify(r));
-        row.dateText = formatTime(row.created_at);
-        row.imageUrl = photoSrc(String(row.image_path || "").split(",")[0]);
-        row.moduleLabel = moduleLabel(row.module);
-        row.summary = historySummary(row);
-        row.catContextItems = [];
-        return row;
-      });
-      renderDetail();
-      return;
-    }
-    state.historyLoading = true;
-    renderDetail();
-    api("/api/v1/doctor/consultations/" + encodeURIComponent(cid) + "/cat-scans").then(function (res) {
-      state.history = ((res && res.records) || []).map(function (r) {
-        r.dateText = formatTime(r.created_at);
-        r.imageUrl = r.image_path ? uploadUrl(String(r.image_path).split(",")[0]) : "";
-        r.moduleLabel = moduleLabel(r.module);
-        r.summary = historySummary(r);
-        r.catContextItems = parseCatContext(r.cat_context);
-        return r;
-      });
-      state.historyLoading = false;
-      renderDetail();
-    }).catch(function () {
-      state.historyLoading = false;
-      renderDetail();
-    });
-  }
-
-  function submitReply() {
-    if (state.submitting || !state.current) return;
-    var form = state.reply;
-    if (!form.level) return toast("请先选择判断");
-    if (form.level === "yellow") {
-      var days = parseInt(form.yellowDays, 10);
-      if (!days || days < 1 || days > 30) return toast("请选择建议就医天数");
-    }
-    if (!(form.action || "").trim()) return toast("请填写观察/就医事项");
-    var comment = composeDoctorComment(form);
-    if (!comment) return toast("回复内容不能为空");
-    if (comment.length > 500) return toast("回复内容超过 500 字");
-    if (state.demo) {
-      toast("示例模式不会真的发出回复");
-      closeDetail();
-      return;
-    }
-    state.submitting = true;
-    renderDetail();
-    api("/api/v1/doctor/consultations/" + encodeURIComponent(state.current.id) + "/reply", "POST", { comment: comment })
-      .then(function () {
-        state.submitting = false;
-        toast("回复已发送");
-        closeDetail();
-        if (state.section === "consult-mine") loadInbox();
-        else loadList();
-      })
-      .catch(function (err) {
-        state.submitting = false;
-        renderDetail();
-        if (handleAuthError(err)) return;
-        toast(networkMessage(err, "提交失败"));
-      });
   }
 
   function loadMe() {
@@ -1460,12 +1562,17 @@
   }
 
   function loadQuickReplies() {
-    if (state.demo) {
-      state.quickReplies = ["留意精神食欲", "带上近期检测记录面诊", "先禁食观察"];
-      return;
-    }
+    if (state.demo) return;
     api("/api/v1/doctor/quick-replies").then(function (res) {
-      state.quickReplies = (res && res.replies) || [];
+      var list = (res && res.replies) || [];
+      if (!list.length) return;
+      state.phrases = {
+        fgs: list.slice(0, 3),
+        stool: list.slice(0, 3),
+        vomit: list.slice(0, 3),
+        teeth: list.slice(0, 3),
+        postop: list.slice(0, 3)
+      };
     }).catch(function () {});
   }
 
@@ -1474,9 +1581,8 @@
     if (state.demo) return;
     state.refreshTimer = setInterval(function () {
       if (document.hidden || $("view-work").hidden) return;
-      if (state.section === "clients") loadClients();
-      else if (state.section === "consult-mine") loadInbox();
-      else loadList();
+      if (state.section === "todo") loadTodo();
+      else if (state.section === "clients") loadClients();
     }, 45000);
   }
 
@@ -1512,6 +1618,12 @@
     $("profile-mask").hidden = true;
   }
 
+  function relativeUploadPath(url) {
+    var abs = String(url || "");
+    if (abs.indexOf(API_BASE) === 0) return abs.slice(API_BASE.length);
+    return abs;
+  }
+
   function saveProfile() {
     var name = ($("profile-name").value || "").trim();
     if (!name) return toast("姓名不能为空");
@@ -1523,6 +1635,14 @@
       gender: state.profile.gender || "female",
       avatar_url: relativeUploadPath(state.profile.avatar_url || "")
     };
+    if (state.demo) {
+      state.doctor = Object.assign({}, state.doctor, payload);
+      persistDemo();
+      renderToolbar();
+      closeProfile();
+      toast("示例资料已更新（不会写入服务器）");
+      return;
+    }
     api("/api/v1/doctor/me", "PATCH", payload).then(function (res) {
       var info = (res && res.doctor) ? res.doctor : Object.assign({}, state.doctor, payload);
       localStorage.setItem(INFO_KEY, JSON.stringify(info));
@@ -1538,6 +1658,7 @@
 
   function uploadAvatar(file) {
     if (!file) return;
+    if (state.demo) return toast("示例模式不上传头像");
     var fd = new FormData();
     fd.append("image", file);
     var headers = { Authorization: "Bearer " + token() };
@@ -1569,6 +1690,56 @@
     $("lightbox").hidden = false;
   }
 
+  function onReviewClick(e) {
+    var preview = e.target.getAttribute("data-preview");
+    if (preview) {
+      e.preventDefault();
+      e.stopPropagation();
+      openLightbox(preview);
+      return;
+    }
+    if (e.target.id === "btn-close-review") {
+      closeReview();
+      return;
+    }
+    if (e.target.id === "btn-open-override") {
+      openOverride();
+      return;
+    }
+    if (e.target.id === "btn-submit-reply") {
+      submitReply();
+      return;
+    }
+    if (e.target.id === "btn-supplement") {
+      addSupplement();
+      return;
+    }
+    var levelBtn = e.target.closest("[data-level]");
+    if (levelBtn) {
+      state.reply.level = levelBtn.getAttribute("data-level");
+      renderReview();
+      return;
+    }
+    var dayBtn = e.target.closest("[data-days]");
+    if (dayBtn) {
+      state.reply.yellowDays = dayBtn.getAttribute("data-days");
+      renderReview();
+      return;
+    }
+    var quick = e.target.closest("[data-quick]");
+    if (quick && state.current) {
+      var idx = Number(quick.getAttribute("data-quick"));
+      var list = phrasesFor(state.current.type);
+      state.reply.action = list[idx] || state.reply.action;
+      renderReview();
+    }
+  }
+
+  function onReviewInput(e) {
+    if (e.target.id === "reply-action") state.reply.action = e.target.value;
+    if (e.target.id === "reply-note") state.reply.note = e.target.value;
+  }
+
   function bindEvents() {
     $("btn-demo").addEventListener("click", enterDemo);
     $("login-form").addEventListener("submit", function (e) {
@@ -1581,6 +1752,8 @@
       btn.textContent = "登录中...";
       api("/api/v1/doctor/login", "POST", { login_name: loginName, password: password })
         .then(function (data) {
+          state.demo = false;
+          state.section = "todo";
           saveSession(data);
           showWork();
           loadMe();
@@ -1599,124 +1772,59 @@
       tab.addEventListener("click", function () {
         var section = tab.getAttribute("data-section");
         if (!section || section === state.section) return;
+        state.current = null;
+        state.fromAsk = false;
         showSection(section);
       });
     });
 
-    document.querySelectorAll(".doc-sub-tabs .doc-tab").forEach(function (tab) {
-      tab.addEventListener("click", function () {
-        var filter = tab.getAttribute("data-filter");
-        if (!filter || filter === state.filter) return;
-        state.filter = filter;
-        document.querySelectorAll(".doc-sub-tabs .doc-tab").forEach(function (t) {
-          t.classList.toggle("is-active", t === tab);
-        });
-        closeDetail();
-        loadList();
-      });
-    });
-
-    $("consult-list").addEventListener("click", function (e) {
-      var card = e.target.closest(".doc-card");
+    $("todo-list").addEventListener("click", function (e) {
+      if (e.target.id === "btn-read-greens") {
+        markGreensRead();
+        return;
+      }
+      if (e.target.id === "btn-toggle-green") {
+        state.greenOpen = !state.greenOpen;
+        renderTodo();
+        return;
+      }
+      var card = e.target.closest("[data-record]");
       if (!card) return;
-      openDetail(card.getAttribute("data-id"));
+      openReview(card.getAttribute("data-record"), false);
     });
 
-    $("inbox-cats").addEventListener("click", function (e) {
-      var btn = e.target.closest("[data-inbox]");
-      if (!btn) return;
-      state.inboxBucket = btn.getAttribute("data-inbox") || "";
-      state.current = null;
-      state.fromInbox = false;
-      renderInbox();
-    });
+    $("review-body").addEventListener("click", onReviewClick);
+    $("review-body").addEventListener("input", onReviewInput);
+    $("ask-detail-body").addEventListener("click", onReviewClick);
+    $("ask-detail-body").addEventListener("input", onReviewInput);
 
-    $("inbox-board").addEventListener("click", function (e) {
-      var preview = e.target.getAttribute("data-preview");
-      if (preview) {
-        e.preventDefault();
-        e.stopPropagation();
-        openLightbox(preview);
-        return;
-      }
-      var card = e.target.closest("[data-inbox-card]");
+    $("ask-list").addEventListener("click", function (e) {
+      var card = e.target.closest("[data-record]");
       if (!card) return;
-      openInboxCard(card.getAttribute("data-inbox-card"));
-    });
-
-    $("detail-body").addEventListener("click", function (e) {
-      var preview = e.target.getAttribute("data-preview");
-      if (preview) {
-        e.preventDefault();
-        e.stopPropagation();
-        openLightbox(preview);
-        return;
-      }
-      if (e.target.id === "btn-close-detail") {
-        closeDetail();
-        return;
-      }
-      var levelBtn = e.target.closest("[data-level]");
-      if (levelBtn) {
-        state.reply.level = levelBtn.getAttribute("data-level");
-        renderDetail();
-        return;
-      }
-      var dayBtn = e.target.closest("[data-days]");
-      if (dayBtn) {
-        state.reply.yellowDays = dayBtn.getAttribute("data-days");
-        renderDetail();
-        return;
-      }
-      var quick = e.target.closest("[data-quick]");
-      if (quick) {
-        var idx = Number(quick.getAttribute("data-quick"));
-        state.reply.action = state.quickReplies[idx] || state.reply.action;
-        renderDetail();
-        return;
-      }
-      var histMod = e.target.closest("[data-history-module]");
-      if (histMod) {
-        state.historyModule = histMod.getAttribute("data-history-module") || "fgs";
-        renderDetail();
-        return;
-      }
-      var hist = e.target.closest("[data-toggle-history]");
-      if (hist) {
-        var hid = hist.getAttribute("data-toggle-history");
-        state.historyOpen[hid] = !state.historyOpen[hid];
-        renderDetail();
-        return;
-      }
-      if (e.target.id === "btn-submit-reply") submitReply();
-    });
-
-    $("detail-body").addEventListener("input", function (e) {
-      if (e.target.id === "reply-action") state.reply.action = e.target.value;
-      if (e.target.id === "reply-note") state.reply.note = e.target.value;
+      openReview(card.getAttribute("data-record"), true);
     });
 
     $("btn-refresh").addEventListener("click", function () {
-      if (state.section === "clients") loadClients();
-      else if (state.section === "consult-mine") loadInbox();
-      else loadList();
+      if (state.section === "todo") {
+        if (state.demo) renderTodo();
+        else loadTodo();
+      } else if (state.section === "clients") loadClients();
+      else if (state.section === "ask") renderAsk();
+      else renderSettings();
     });
-    $("btn-copy-code").addEventListener("click", function () {
-      copyText((state.doctor && state.doctor.referral_code) || "", "推荐码已复制");
-    });
-    $("btn-copy-link").addEventListener("click", function () {
-      copyText((state.doctor && state.doctor.referral_url) || "", "链接已复制，发给诊所客户");
-    });
+
     $("client-search").addEventListener("input", function (e) {
       state.clientSearch = e.target.value || "";
       clearTimeout(loadClients._t);
       loadClients._t = setTimeout(loadClients, 280);
     });
+
     $("client-list").addEventListener("click", function (e) {
       var card = e.target.closest("[data-user]");
       if (!card) return;
       openClient(card.getAttribute("data-user"));
     });
+
     $("client-detail-body").addEventListener("click", function (e) {
       var preview = e.target.getAttribute("data-preview");
       if (preview) {
@@ -1738,6 +1846,17 @@
         renderClientDetail();
         return;
       }
+      var planBtn = e.target.closest("[data-plan-cat]");
+      if (planBtn) {
+        openPlanModal(planBtn.getAttribute("data-plan-cat"));
+        return;
+      }
+      var openRec = e.target.closest("[data-open-record]");
+      if (openRec) {
+        showSection("todo");
+        openReview(openRec.getAttribute("data-open-record"), false);
+        return;
+      }
       var clientScan = e.target.closest("[data-toggle-client-scan]");
       if (clientScan) {
         var sid = clientScan.getAttribute("data-toggle-client-scan");
@@ -1747,51 +1866,34 @@
       }
       var catBtn = e.target.closest("[data-cat]");
       if (catBtn && state.clientCurrent && state.clientCurrent.user) {
-        var uid2 = state.clientCurrent.user.id;
         var catId = catBtn.getAttribute("data-cat");
         var wantMod = catBtn.getAttribute("data-module") || "";
+        if (state.demo) {
+          var cat = (state.clientCurrent.cats || []).filter(function (c) { return c.id === catId; })[0];
+          var scans = ((cat && cat.scans) || []).slice().sort(function (a, b) {
+            return (b.created_at || 0) - (a.created_at || 0);
+          });
+          state.clientCat = cat ? { cat: cat, scans: scans } : null;
+          state.clientCatModule = wantMod || (scans[0] && (scans[0].type || scans[0].module)) || "stool";
+          renderClientDetail();
+          return;
+        }
         if (state.clientCat && state.clientCat.cat && state.clientCat.cat.id === catId) {
           if (wantMod) state.clientCatModule = wantMod;
           renderClientDetail();
           return;
         }
-        if (state.demo) {
-          var cat = (state.clientCurrent.cats || []).find(function (c) { return c.id === catId; }) || { id: catId, name: "猫咪" };
-          state.clientCat = {
-            cat: cat,
-            scans: DEMO.history.map(function (r) {
-              var row = JSON.parse(JSON.stringify(r));
-              row.image_path = row.image_path || "";
-              return row;
-            })
-          };
-          state.clientCatModule = wantMod || (catId === "c-mimi" ? "vomit" : "stool");
-          renderClientDetail();
-          return;
-        }
+        var uid2 = state.clientCurrent.user.id;
         api("/api/v1/doctor/clients/" + encodeURIComponent(uid2) + "/cats/" + encodeURIComponent(catId))
           .then(function (res) {
             state.clientCat = res;
-            if (wantMod) {
-              state.clientCatModule = wantMod;
-            } else {
-              var grouped = groupByModule((res && res.scans) || []);
-              var pick = "fgs";
-              FIVE_MODULES.forEach(function (m) {
-                if ((grouped[m.key] || []).length && pick === "fgs" && !(grouped.fgs || []).length) pick = m.key;
-                if ((grouped[m.key] || []).length) pick = m.key;
-              });
-              // prefer module with most recent scan
-              var latest = 0;
-              FIVE_MODULES.forEach(function (m) {
-                var list = grouped[m.key] || [];
-                if (list[0] && (list[0].created_at || 0) >= latest) {
-                  latest = list[0].created_at || 0;
-                  pick = m.key;
-                }
-              });
-              state.clientCatModule = pick;
-            }
+            var scans = ((res && res.scans) || []).map(function (s) {
+              s.type = s.module || s.type;
+              return s;
+            });
+            if (state.clientCat) state.clientCat.scans = scans;
+            if (wantMod) state.clientCatModule = wantMod;
+            else state.clientCatModule = (scans[0] && (scans[0].type || scans[0].module)) || "fgs";
             renderClientDetail();
           })
           .catch(function (err) {
@@ -1799,6 +1901,7 @@
           });
       }
     });
+
     $("client-detail-body").addEventListener("keydown", function (e) {
       if (e.target.id !== "client-alias") return;
       if (e.key === "Enter") {
@@ -1810,18 +1913,42 @@
         renderClientDetail();
       }
     });
+
     $("client-detail-body").addEventListener("focusout", function (e) {
       if (e.target.id !== "client-alias" || !state.aliasEditing) return;
       saveClientAlias(e.target.value);
     });
+
+    $("pane-settings").addEventListener("click", function (e) {
+      if (e.target.id === "btn-copy-code") {
+        copyText((state.doctor && state.doctor.referral_code) || "", "推荐码已复制");
+        return;
+      }
+      if (e.target.id === "btn-copy-link") {
+        copyText((state.doctor && state.doctor.referral_url) || "", "链接已复制，发给诊所客户");
+        return;
+      }
+      var tog = e.target.closest("[data-toggle]");
+      if (tog) {
+        var key = tog.getAttribute("data-toggle");
+        state.settings[key] = !state.settings[key];
+        persistDemo();
+        renderSettings();
+      }
+    });
+
     $("btn-edit-profile").addEventListener("click", openProfile);
     $("btn-toolbar-avatar").addEventListener("click", openProfile);
     $("btn-logout").addEventListener("click", function () {
       var msg = state.demo ? "退出示例界面？" : "退出登录？会返回登录页";
       if (window.confirm(msg)) {
+        if (state.demo) {
+          try { sessionStorage.removeItem(DEMO_KEY); } catch (err) {}
+        }
         state.demo = false;
-        state.section = "clients";
-        state.inboxBucket = "";
+        state.section = "todo";
+        state.current = null;
+        state.records = [];
         clearSession();
         showLogin();
       }
@@ -1848,6 +1975,35 @@
         el.classList.toggle("is-active", el === btn);
       });
     });
+
+    $("btn-override-cancel").addEventListener("click", function () {
+      $("override-mask").hidden = true;
+    });
+    $("override-mask").addEventListener("click", function (e) {
+      if (e.target === $("override-mask")) $("override-mask").hidden = true;
+    });
+    $("override-levels").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-override-level]");
+      if (!btn) return;
+      state.overrideDraft.level = btn.getAttribute("data-override-level");
+      paintOverrideModal();
+    });
+    $("override-reasons").addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-override-reason]");
+      if (!btn) return;
+      state.overrideDraft.reason = btn.getAttribute("data-override-reason");
+      paintOverrideModal();
+    });
+    $("btn-override-save").addEventListener("click", saveOverride);
+
+    $("btn-plan-cancel").addEventListener("click", function () {
+      $("plan-mask").hidden = true;
+    });
+    $("plan-mask").addEventListener("click", function (e) {
+      if (e.target === $("plan-mask")) $("plan-mask").hidden = true;
+    });
+    $("btn-plan-save").addEventListener("click", savePlan);
+
     $("lightbox").addEventListener("click", function () { $("lightbox").hidden = true; });
     $("lightbox").querySelector(".doc-lightbox-close").addEventListener("click", function () {
       $("lightbox").hidden = true;
@@ -1860,11 +2016,12 @@
       img.src = avatarFallback(kind === "cat" ? "猫" : "医", kind);
     }, true);
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") {
-        $("lightbox").hidden = true;
-        if (!$("profile-mask").hidden) closeProfile();
-        else if (state.current && window.matchMedia("(max-width: 860px)").matches) closeDetail();
-      }
+      if (e.key !== "Escape") return;
+      $("lightbox").hidden = true;
+      if (!$("profile-mask").hidden) closeProfile();
+      else if (!$("override-mask").hidden) $("override-mask").hidden = true;
+      else if (!$("plan-mask").hidden) $("plan-mask").hidden = true;
+      else if (state.current && window.matchMedia("(max-width: 860px)").matches) closeReview();
     });
   }
 
@@ -1878,6 +2035,7 @@
     try { saved = JSON.parse(localStorage.getItem(INFO_KEY) || "null"); } catch (e) {}
     if (token()) {
       state.doctor = saved || {};
+      state.section = "todo";
       showWork();
       loadMe();
       loadQuickReplies();
