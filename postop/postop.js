@@ -103,6 +103,13 @@
     if (c.missed_days >= 2) {
       flags.push('<span class="tag tag-grey">' + c.missed_days + ' 天未上报</span>')
     }
+    // 当天之内变差过 —— 整块看板里信号最强的一个，必须排在其它标签前面。
+    // 「状态在往坏里走」比任何单点状态都值得医生先看一眼。
+    if (latest && latest.escalated_today) {
+      flags.push('<span class="tag tag-escalate">今天变差</span>')
+    } else if (latest && latest.is_supplement) {
+      flags.push('<span class="tag tag-grey">当天补报</span>')
+    }
     if (latest) {
       (latest.reds || []).slice(0, 2).forEach(function (k) {
         var it = RULES.ITEMS[k]

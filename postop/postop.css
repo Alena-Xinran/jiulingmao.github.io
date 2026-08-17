@@ -517,3 +517,10 @@ button { font-family: inherit; cursor: pointer; }
   .demo-tag { display: none; }
   .dt-head, .dt-verdict, .sec { padding-left: 15px; padding-right: 15px; }
 }
+
+/* 当天之内变差：看板上信号最强的标签，用实心红把它从其它标签里拎出来 */
+.tag-escalate {
+  background: #C4503F;
+  color: #FFF;
+  font-weight: 700;
+}
