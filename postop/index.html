@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>术后跟诊工作台</title>
-<link rel="stylesheet" href="postop.css?v=20260817d">
+<link rel="stylesheet" href="postop.css?v=20260817f">
 </head>
 <body>
 
@@ -86,12 +86,40 @@
   </div>
 </div>
 
+<div class="mask" id="recall-mask" hidden>
+  <div class="modal modal-wide">
+    <div class="modal-title">通知来院</div>
+    <div class="modal-sub" id="recall-sub"></div>
+
+    <div class="field-label">什么时候来</div>
+    <div class="chips" id="recall-when"></div>
+
+    <div class="field-label">需要带什么 <span class="field-hint">勾选后会写进给主人的消息</span></div>
+    <div class="checks" id="recall-bring"></div>
+
+    <div class="field-label">路上注意 <span class="field-hint">主人最容易做错的就是这几件</span></div>
+    <div class="checks" id="recall-care"></div>
+
+    <div class="field-label">补充说明</div>
+    <textarea class="modal-input" id="recall-note" rows="2"
+      placeholder="选填。比如「先别喂早饭，可能要做超声」"></textarea>
+
+    <div class="field-label">主人会收到</div>
+    <div class="preview" id="recall-preview"></div>
+
+    <div class="modal-actions">
+      <button class="btn-plain" id="recall-cancel">取消</button>
+      <button class="btn-primary" id="recall-save">发送通知</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
-<script src="shared/rules.js?v=20260817d"></script>
-<script src="shared/ai.js?v=20260817d"></script>
-<script src="shared/demo-cast.js?v=20260817d"></script>
-<script src="demo-data.js?v=20260817d"></script>
-<script src="postop.js?v=20260817d"></script>
+<script src="shared/rules.js?v=20260817f"></script>
+<script src="shared/ai.js?v=20260817f"></script>
+<script src="shared/demo-cast.js?v=20260817f"></script>
+<script src="demo-data.js?v=20260817f"></script>
+<script src="postop.js?v=20260817f"></script>
 </body>
 </html>

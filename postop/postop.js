@@ -458,10 +458,147 @@
     // 回复
     $('reply-cancel').addEventListener('click', function () { $('reply-mask').hidden = true })
     $('reply-save').addEventListener('click', saveReply)
+
+    $('recall-cancel').addEventListener('click', function () { $('recall-mask').hidden = true })
+    $('recall-save').addEventListener('click', saveRecall)
+    $('recall-note').addEventListener('input', function () {
+      $('recall-preview').textContent = recallMessage()
+    })
+    $('recall-when').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-when]')
+      if (!b) return
+      state.recall.when = b.dataset.when
+      renderRecall()
+    })
+    document.addEventListener('click', function (e) {
+      var box = e.target.closest('.check[data-group]')
+      if (!box) return
+      e.preventDefault()
+      var g = box.dataset.group, k = box.dataset.key
+      state.recall[g][k] = !state.recall[g][k]
+      renderRecall()
+    })
     $('reply-quick').addEventListener('click', function (e) {
       var b = e.target.closest('button')
       if (b) $('reply-text').value = b.textContent
     })
+  }
+
+
+  // ────────────────── 通知来院 ──────────────────
+
+  var RECALL_WHEN = [
+    { key: 'now', label: '尽快，今天内' },
+    { key: 'am', label: '明天上午' },
+    { key: 'pm', label: '明天下午' },
+    { key: 'plan', label: '按原定复查日' },
+  ]
+
+  /**
+   * 预设项。医生在诊间点这个的时候通常很赶，不该让他从零打字。
+   * pre() 返回 true 的项会**按这个病例的实际情况预先勾上**——
+   * 比如主人报了没戴伊丽莎白圈，那「戴好防舔护具」就该默认勾上。
+   */
+  var RECALL_BRING = [
+    { key: 'record', label: '出院单 / 病历本', pre: function () { return true } },
+    { key: 'meds', label: '正在吃的药（连包装一起）', pre: function (c, r) {
+      return !!r && ['partial', 'no'].indexOf(r.answers.medication) >= 0
+    } },
+    { key: 'collar', label: '伊丽莎白圈 / 术后服', pre: function (c, r) {
+      return !!r && ['sometimes', 'never'].indexOf(r.answers.collar) >= 0
+    } },
+    { key: 'food', label: '平时吃的粮（可能要留院观察）', pre: function (c) {
+      return c.level === 'red'
+    } },
+    { key: 'photo', label: '手机里之前拍的伤口照片', pre: function () { return false } },
+  ]
+
+  var RECALL_CARE = [
+    { key: 'nolick', label: '路上别让它舔伤口', pre: function (c, r) {
+      return !!r && ['sometimes', 'often'].indexOf(r.answers.licking) >= 0
+    } },
+    { key: 'fast', label: '先别喂食（可能需要麻醉或超声）', pre: function (c) {
+      return c.level === 'red'
+    } },
+    { key: 'carrier', label: '用航空箱 / 牵引绳，别让它跳', pre: function (c) {
+      return c.procedure === 'orthopedic'
+    } },
+    { key: 'dry', label: '伤口别沾水', pre: function () { return true } },
+    { key: 'warm', label: '路上注意保暖', pre: function () { return false } },
+  ]
+
+  function openRecall(c) {
+    var r = state.selectedReport || c.latest
+    state.recall = {
+      when: c.level === 'red' ? 'now' : 'am',
+      bring: {},
+      care: {},
+    }
+    RECALL_BRING.forEach(function (o) { state.recall.bring[o.key] = !!o.pre(c, r) })
+    RECALL_CARE.forEach(function (o) { state.recall.care[o.key] = !!o.pre(c, r) })
+
+    $('recall-sub').textContent =
+      c.pet_name + ' · ' + c.owner_name + ' · ' + c.owner_phone +
+      '（' + c.procedure_label + '，术后第 ' + c.day + ' 天）'
+    $('recall-note').value = ''
+    renderRecall()
+    $('recall-mask').hidden = false
+  }
+
+  function renderRecall() {
+    $('recall-when').innerHTML = RECALL_WHEN.map(function (o) {
+      return '<button class="chip' + (state.recall.when === o.key ? ' on' : '') +
+        '" data-when="' + o.key + '">' + o.label + '</button>'
+    }).join('')
+
+    function checks(list, group) {
+      return list.map(function (o) {
+        var on = state.recall[group][o.key]
+        return '<label class="check' + (on ? ' on' : '') + '" data-group="' + group +
+          '" data-key="' + o.key + '"><i></i>' + esc(o.label) + '</label>'
+      }).join('')
+    }
+    $('recall-bring').innerHTML = checks(RECALL_BRING, 'bring')
+    $('recall-care').innerHTML = checks(RECALL_CARE, 'care')
+    $('recall-preview').textContent = recallMessage()
+  }
+
+  /** 拼出主人真正会收到的那条消息——医生发之前要能看见它长什么样 */
+  function recallMessage() {
+    var c = findCase(state.currentId)
+    if (!c) return ''
+    var st = state.recall
+    var when = ''
+    RECALL_WHEN.forEach(function (o) { if (o.key === st.when) when = o.label })
+
+    function picked(list, group) {
+      var out = []
+      list.forEach(function (o) { if (st[group][o.key]) out.push(o.label) })
+      return out
+    }
+    var bring = picked(RECALL_BRING, 'bring')
+    var care = picked(RECALL_CARE, 'care')
+    var note = ($('recall-note').value || '').trim()
+
+    var lines = []
+    lines.push('【' + c.hospital_name + '】' + c.doctor_name +
+      '请你带' + c.pet_name + '来院复查。')
+    lines.push('')
+    lines.push('时间：' + when)
+    if (bring.length) lines.push('需要带：' + bring.join('、'))
+    if (care.length) lines.push('路上注意：' + care.join('；'))
+    if (note) { lines.push(''); lines.push(note) }
+    lines.push('')
+    lines.push('路上如果情况变差，直接打 ' + c.doctor_phone + '，不用等回复。')
+    return lines.join('\n')
+  }
+
+  function saveRecall() {
+    var c = findCase(state.currentId)
+    if (!c) return
+    c.recall_sent = { at: 'now', message: recallMessage() }
+    $('recall-mask').hidden = true
+    toast('已通知 ' + c.owner_name + '，' + c.pet_name + '的主人会收到服务通知')
   }
 
   function onAction(act) {
@@ -479,7 +616,7 @@
     }
 
     if (act === 'recall') {
-      toast('已通知 ' + c.owner_name + '：请尽快带 ' + c.pet_name + ' 到院复查')
+      openRecall(c)
       return
     }
 
