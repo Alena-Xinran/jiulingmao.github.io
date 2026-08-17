@@ -208,8 +208,77 @@
     },
   }
 
-  function buildAiReport(severity, trend, confidence) {
-    var t = AI_TEXT[severity] || AI_TEXT.good
+  /**
+   * 口腔专用文案。通用那套写的是「切口对合整齐、周围皮肤颜色均匀」——
+   * 牙龈没有皮肤，拿去演示医生一眼就看出是套模板。
+   */
+  var AI_TEXT_ORAL = {
+    good: {
+      diagnosis: '拔牙创面愈合中，牙龈缝线在位，未见活动性出血或明显红肿。',
+      wound_assessment: '创面表面覆盖正常凝血，牙龈边缘贴合，未见食物嵌塞或缝线撕脱。邻牙牙龈色泽正常。',
+      healing_stage: '软组织愈合早期',
+      observations: {
+        tissue: '牙龈组织色泽正常，未见坏死或苍白',
+        inflammation: '创缘无明显充血肿胀',
+        moisture: '无活动性渗血，唾液清亮',
+        edges: '缝线在位，牙龈边缘对合良好',
+      },
+      advice: [
+        '继续喂软食或泡软的粮，两周内不要给硬物和啃咬玩具',
+        '不要自行掀嘴检查过频，每天拍一次就够',
+        '按医嘱用药，口服抗生素不要提前停',
+      ],
+      recheck_interval: '', escalation_triggers: [],
+    },
+    observe: {
+      diagnosis: '拔牙创面周围牙龈轻度充血，伴少量渗血，缝线在位。',
+      wound_assessment: '创面凝血尚可，牙龈边缘轻度红肿，未见脓性分泌物。可能与进食摩擦或轻度刺激有关。',
+      healing_stage: '软组织愈合早期，伴局部炎症',
+      observations: {
+        tissue: '牙龈组织完整，无坏死',
+        inflammation: '创缘轻度充血，范围局限',
+        moisture: '少量渗血，口水略带粉色',
+        edges: '缝线在位，局部略有松动趋势',
+      },
+      advice: [
+        '改喂流质或泥状食物，避免任何需要咀嚼的东西',
+        '每天同一侧、同一角度拍一张，重点看红肿范围和出血量',
+        '不要用棉签或纱布去擦创面，会把凝血块弄掉',
+        '按医嘱继续用药',
+      ],
+      recheck_interval: '24 小时后复看，出血不减少需当天联系医院',
+      escalation_triggers: [
+        '出血变多，或口水持续带血',
+        '口腔明显异味加重',
+        '完全不肯进食超过 12 小时',
+        '单侧脸颊肿起来',
+      ],
+    },
+    vet: {
+      diagnosis: '拔牙创面表现异常，结合主人上报的情况，符合需要尽快由兽医处理的表现。',
+      wound_assessment: '创面可见持续渗血或脓性分泌物，牙龈红肿明显，缝线可能已撕脱。图像与主人报告的红旗项一致。',
+      healing_stage: '愈合受阻，需排查感染或创面裂开',
+      observations: {
+        tissue: '牙龈组织色泽不均，创缘可疑失活',
+        inflammation: '牙龈明显红肿，波及邻牙',
+        moisture: '可见活动性渗血或脓性分泌物',
+        edges: '缝线撕脱或创面裂开',
+      },
+      advice: [
+        '尽快联系主治医生到院处理',
+        '路上不要给任何食物和水，可能需要麻醉下重新处理',
+        '不要自行冲洗口腔或掰开嘴查看',
+        '记录最后一次进食时间，到院时告诉医生',
+      ],
+      recheck_interval: '建议今日内到院',
+      escalation_triggers: ['大量出血不止', '精神萎靡', '单侧面部肿胀迅速加重'],
+    },
+  }
+
+  function buildAiReport(severity, trend, confidence, procKey) {
+    // 口腔和体表是两套解剖语言，共用一套文案会露馅
+    var pool = procKey === 'dental' ? AI_TEXT_ORAL : AI_TEXT
+    var t = pool[severity] || pool.good
     return AI.mapRecord({
       pain_level: severity,
       raw_report: JSON.stringify({
@@ -221,7 +290,7 @@
             periwound: severity === 'good' ? 'assessable' : 'partial',
             limiting_factors: [], size_measurable: false,
           },
-          wound_type: 'surgical_incision_closed',
+          wound_type: procKey === 'dental' ? 'open_wound' : 'surgical_incision_closed',
           contamination_class: severity === 'vet' ? 'contaminated' : 'clean',
           observations: t.observations,
           healing_stage: t.healing_stage,
@@ -289,7 +358,7 @@
           })
 
           var qResult = RULES.evaluate(answers, p.procedure, p.species)
-          var aiReport = proc.photo ? buildAiReport(entry.plan.s, entry.plan.t, entry.plan.c) : null
+          var aiReport = proc.photo ? buildAiReport(entry.plan.s, entry.plan.t, entry.plan.c, p.procedure) : null
           var cls = AI.classify(qResult.level, aiReport, {})
 
           var prevToday = entries[idx - 1]
@@ -298,7 +367,7 @@
             var psrc = ANSWER_SETS[prevToday.plan.a]
             var pans = {}
             proc.items.forEach(function (k) { if (psrc[k] !== undefined) pans[k] = psrc[k] })
-            var pai = proc.photo ? buildAiReport(prevToday.plan.s, prevToday.plan.t, prevToday.plan.c) : null
+            var pai = proc.photo ? buildAiReport(prevToday.plan.s, prevToday.plan.t, prevToday.plan.c, p.procedure) : null
             prevLevel = AI.classify(RULES.evaluate(pans, p.procedure, p.species).level, pai, {}).level
           }
           var ORDER = { green: 0, yellow: 1, red: 2 }
@@ -359,6 +428,9 @@
         procedure: p.procedure,
         procedure_label: proc.label,
         photo_required: proc.photo,
+        photo_target: proc.photo_target,
+        photo_tips: proc.photo_tips,
+        wound_context: proc.wound_context,
         surgery_date: dateStr(p.day),
         day: p.day,
         days: proc.days,

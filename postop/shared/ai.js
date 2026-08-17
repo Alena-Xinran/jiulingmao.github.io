@@ -230,11 +230,13 @@ function buildContext(kase, answers, opts) {
   answers = answers || {}
   opts = opts || {}
 
+  // wound_type 按术式给，别一律写「手术切口」——
+  // 口腔的创面在嘴里，AI 拿「手术切口」这个上下文去读会读歪
   var ctx = {
     postop_day: kase.day,
     surgery_type: kase.procedure_label || '',
     surgery_name: kase.procedure_label || '',
-    wound_type: '手术切口',
+    wound_type: kase.wound_context || '手术切口',
   }
   if (opts.timeline) ctx.image_relation = 'same_wound_timeline'
 

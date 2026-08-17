@@ -200,10 +200,6 @@
   }
 
   function compareHtml(c) {
-    if (!c.photo_required) {
-      return '<div class="kv-v" style="color:var(--text-mute);font-size:13px">' +
-        '口腔类手术不要求拍照，以问卷为准。</div>'
-    }
     var withPhoto = c.reports.filter(function (r) { return r.has_photo })
     var today = withPhoto[0]
     var prev = withPhoto[1]
@@ -213,8 +209,9 @@
           '<div class="cmp-cap">' + cap + '</div></div>'
       }
       // demo 没有真图，用占位块表达「这里是同角度对比」
+      var target = c.photo_target || '伤口'
       return '<div class="cmp-item"><div class="cmp-ph">第 ' + r.day + ' 天' +
-        (r.is_supplement ? ' 补报' : '') + '<br>伤口照片</div>' +
+        (r.is_supplement ? ' 补报' : '') + '<br>' + esc(target) + '</div>' +
         '<div class="cmp-cap">' + cap + '</div></div>'
     }
     // 同一天的两条（打卡 + 补报）要能分清，否则两张都写「第 5 天」看不出比的是什么
@@ -357,7 +354,8 @@
     if (r) {
       html +=
         '<div class="sec">' +
-          '<div class="sec-title">同角度对比 <span class="sec-sub">轻微红肿靠这个看趋势</span></div>' +
+          '<div class="sec-title">同角度对比 <span class="sec-sub">' +
+            esc(c.photo_target || '伤口') + ' · 轻微红肿靠这个看趋势</span></div>' +
           compareHtml(c) +
         '</div>' +
         aiHtml(r) +

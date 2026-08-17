@@ -180,32 +180,56 @@ var BASE_SET = [
 
 /**
  * 术式模板。跟诊的主轴是术式，不是猫还是狗。
- * days: 默认跟诊天数；photo: 是否需要拍伤口照片
+ *
+ * 每种术式都要拍照——**伤口在嘴里也是伤口**，而且拔牙创面的出血和牙龈红肿
+ * 恰恰最需要看每天的变化趋势。差别不在拍不拍，在拍哪里、怎么拍。
+ *
+ * photo_target: 拍摄部位，写进页面标题和 AI 的上下文
+ * photo_tips:   这个部位特有的拍摄要领
+ * wound_context: 传给 detect_postop 的 wound_type，让它知道在看什么
  */
 var PROCEDURES = {
   neuter: {
     key: 'neuter', label: '绝育', days: 10, photo: true,
     items: BASE_SET,
+    photo_target: '腹部或阴囊的切口',
+    photo_tips: '让它侧躺或仰躺，光线充足，距离 20–30cm 把整条切口拍进去，不要开闪光灯。',
+    wound_context: '绝育手术切口',
   },
   soft_tissue: {
     key: 'soft_tissue', label: '软组织手术', days: 14, photo: true,
     items: BASE_SET,
+    photo_target: '手术切口',
+    photo_tips: '距离 20–30cm 正对切口，把整条缝线和周围 2cm 皮肤都拍进去。',
+    wound_context: '软组织手术切口',
   },
   orthopedic: {
     key: 'orthopedic', label: '骨科手术', days: 21, photo: true,
     items: BASE_SET.concat(['limb_use']),
+    photo_target: '术侧肢体的切口',
+    photo_tips: '拍切口的同时尽量把整条腿带进画面，医生要看肿胀有没有往下蔓延。别硬掰它的腿。',
+    wound_context: '骨科手术切口',
   },
   dental: {
-    key: 'dental', label: '口腔 / 牙科手术', days: 7, photo: false,
+    key: 'dental', label: '口腔 / 牙科手术', days: 7, photo: true,
     items: ['drool', 'eating_soft', 'appetite', 'spirit', 'temperature', 'medication'],
+    photo_target: '拔牙创面 / 牙龈缝合处',
+    photo_tips: '轻轻掀开嘴唇拍患侧牙龈就行，不用掰开嘴。拍不清楚也别硬来，拍到侧面牙龈也有参考价值。',
+    wound_context: '口腔内拔牙创面 / 牙龈缝合处',
   },
   wound_care: {
     key: 'wound_care', label: '外伤 / 换药', days: 14, photo: true,
     items: BASE_SET,
+    photo_target: '伤口',
+    photo_tips: '换药前拍，把创面和周围皮肤一起拍进去。有渗出就先别擦掉，医生要看性状。',
+    wound_context: '外伤创面',
   },
   other: {
     key: 'other', label: '其他手术', days: 14, photo: true,
     items: BASE_SET,
+    photo_target: '手术部位',
+    photo_tips: '光线充足、距离 20–30cm，每天用同样的角度拍。',
+    wound_context: '手术切口',
   },
 }
 
