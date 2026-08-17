@@ -154,6 +154,26 @@
 
   // ────────────────── 渲染：详情 ──────────────────
 
+  var LV_ORDER = { green: 0, yellow: 1, red: 2 }
+
+  /**
+   * 取某一天该显示的那条记录。
+   *
+   * 一天可能有多条（每日打卡 + 补报）。这里取**当天最重**的那条，不是最新也不是最早：
+   * 「早上绿、下午红、晚上又报个绿」如果显示最新就变成绿的，看板会告诉医生这只没事。
+   * reports 是倒序的，直接 byDay[r.day] = r 会取到当天最早的一条，同样是错的。
+   */
+  function dayPeak(c, day) {
+    var hit = null
+    var count = 0
+    c.reports.forEach(function (r) {
+      if (r.day !== day) return
+      count++
+      if (!hit || LV_ORDER[r.level] > LV_ORDER[hit.level]) hit = r
+    })
+    return hit ? { report: hit, count: count } : null
+  }
+
   function findCase(id) {
     var hit = null
     state.data.cases.forEach(function (c) { if (c.id === id) hit = c })
@@ -161,15 +181,16 @@
   }
 
   function timelineHtml(c) {
-    var byDay = {}
-    c.reports.forEach(function (r) { byDay[r.day] = r })
     var cells = []
     for (var d = 0; d <= c.day; d++) {
-      var r = byDay[d]
-      var cls = r ? 'lv-' + r.level : 'miss'
-      cells.push('<div class="tl-cell ' + cls + '" data-day="' + d + '" title="' +
-        (r ? '第 ' + d + ' 天' : '第 ' + d + ' 天未上报') + '">' +
-        '<div class="tl-bar"></div><div class="tl-lab">' + d + '</div></div>')
+      var hit = dayPeak(c, d)
+      var cls = hit ? 'lv-' + hit.report.level : 'miss'
+      var title = hit
+        ? '第 ' + d + ' 天' + (hit.count > 1 ? '（当天 ' + hit.count + ' 次，取最重）' : '')
+        : '第 ' + d + ' 天未上报'
+      cells.push('<div class="tl-cell ' + cls + '" data-day="' + d + '" title="' + title + '">' +
+        '<div class="tl-bar">' + (hit && hit.count > 1 ? '<i class="tl-multi"></i>' : '') + '</div>' +
+        '<div class="tl-lab">' + d + '</div></div>')
     }
     return '<div class="timeline">' + cells.join('') + '</div>'
   }
@@ -188,12 +209,20 @@
           '<div class="cmp-cap">' + cap + '</div></div>'
       }
       // demo 没有真图，用占位块表达「这里是同角度对比」
-      return '<div class="cmp-item"><div class="cmp-ph">第 ' + r.day + ' 天<br>伤口照片</div>' +
+      return '<div class="cmp-item"><div class="cmp-ph">第 ' + r.day + ' 天' +
+        (r.is_supplement ? ' 补报' : '') + '<br>伤口照片</div>' +
         '<div class="cmp-cap">' + cap + '</div></div>'
     }
+    // 同一天的两条（打卡 + 补报）要能分清，否则两张都写「第 5 天」看不出比的是什么
+    function cap(r, prefix) {
+      if (!r) return ''
+      var sameDay = prev && today && prev.day === today.day
+      if (sameDay) return prefix + '（第 ' + r.day + ' 天 第 ' + (r.seq || 1) + ' 次）'
+      return prefix + '（第 ' + r.day + ' 天）'
+    }
     return '<div class="compare">' +
-      cell(prev, prev ? '上一次（第 ' + prev.day + ' 天）' : '暂无历史') +
-      cell(today, today ? '最新（第 ' + today.day + ' 天）' : '今天未上报') +
+      cell(prev, prev ? cap(prev, '上一次') : '暂无历史') +
+      cell(today, today ? cap(today, '最新') : '今天未上报') +
       '</div>'
   }
 
@@ -387,7 +416,8 @@
         var c = findCase(state.currentId)
         var day = Number(cell.dataset.day)
         var hit = null
-        c.reports.forEach(function (rr) { if (rr.day === day) hit = rr })
+        var pk = dayPeak(c, day)
+        hit = pk ? pk.report : null
         state.selectedReport = hit
         renderDetail()
         if (!hit) toast('第 ' + day + ' 天没有上报')

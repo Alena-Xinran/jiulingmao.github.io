@@ -524,3 +524,14 @@ button { font-family: inherit; cursor: pointer; }
   color: #FFF;
   font-weight: 700;
 }
+
+/* 当天报过不止一次：趋势格上加一道白杠 */
+.tl-bar { position: relative; }
+.tl-multi {
+  position: absolute;
+  left: 50%; bottom: 5px;
+  width: 12px; height: 2px;
+  margin-left: -6px;
+  border-radius: 1px;
+  background: rgba(255,255,255,.8);
+}
