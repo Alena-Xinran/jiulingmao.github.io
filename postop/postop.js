@@ -20,6 +20,10 @@
     keyword: '',
     currentId: null,
     overrideLevel: '',
+    // 本次会话里新约出去的号，叠加在排班的基础占用之上
+    bookings: [],
+    recall: { date: '', slot: 'am', bring: {}, care: {} },
+    calDoctor: '',
   }
 
   // ── 分桶 ──
@@ -459,15 +463,30 @@
     $('reply-cancel').addEventListener('click', function () { $('reply-mask').hidden = true })
     $('reply-save').addEventListener('click', saveReply)
 
+    $('btn-calendar').addEventListener('click', openCalendar)
+    $('cal-close').addEventListener('click', function () { $('cal-mask').hidden = true })
+    $('cal-doctors').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-doc]')
+      if (!b) return
+      state.calDoctor = b.dataset.doc
+      renderCalendar()
+    })
+
     $('recall-cancel').addEventListener('click', function () { $('recall-mask').hidden = true })
     $('recall-save').addEventListener('click', saveRecall)
     $('recall-note').addEventListener('input', function () {
       $('recall-preview').textContent = recallMessage()
     })
     $('recall-when').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-when]')
-      if (!b) return
-      state.recall.when = b.dataset.when
+      var b = e.target.closest('[data-date]')
+      if (!b || b.disabled) return
+      state.recall.date = b.dataset.date
+      renderRecall()
+    })
+    $('recall-slot').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-slot]')
+      if (!b || b.disabled) return
+      state.recall.slot = b.dataset.slot
       renderRecall()
     })
     document.addEventListener('click', function (e) {
@@ -487,12 +506,7 @@
 
   // ────────────────── 通知来院 ──────────────────
 
-  var RECALL_WHEN = [
-    { key: 'now', label: '尽快，今天内' },
-    { key: 'am', label: '明天上午' },
-    { key: 'pm', label: '明天下午' },
-    { key: 'plan', label: '按原定复查日' },
-  ]
+  var SCH = window.PostopSchedule
 
   /**
    * 预设项。医生在诊间点这个的时候通常很赶，不该让他从零打字。
@@ -529,8 +543,12 @@
 
   function openRecall(c) {
     var r = state.selectedReport || c.latest
+    // 红色病例默认排今天（挤也要挤进去），其余从明天起找第一个收得下的
+    var pick = SCH.firstOpen(c.doctor_id, state.bookings, { skipToday: c.level !== 'red' })
+      || SCH.firstOpen(c.doctor_id, state.bookings)
     state.recall = {
-      when: c.level === 'red' ? 'now' : 'am',
+      date: pick ? pick.date : SCH.todayKey(),
+      slot: pick ? pick.slot : 'am',
       bring: {},
       care: {},
     }
@@ -546,10 +564,36 @@
   }
 
   function renderRecall() {
-    $('recall-when').innerHTML = RECALL_WHEN.map(function (o) {
-      return '<button class="chip' + (state.recall.when === o.key ? ' on' : '') +
-        '" data-when="' + o.key + '">' + o.label + '</button>'
-    }).join('')
+    var c0 = findCase(state.currentId)
+    var cal = SCH.calendar(c0.doctor_id, 14, state.bookings)
+
+    // 日期条：不出诊的也画出来（灰掉），否则医生会以为是系统漏了那天
+    $('recall-when').innerHTML =
+      '<div class="daystrip">' + cal.map(function (d) {
+        var dis = d.state === 'closed' || d.state === 'full'
+        return '<button class="daybtn s-' + d.state + (state.recall.date === d.key ? ' on' : '') +
+          (dis ? ' dis' : '') + '" data-date="' + d.key + '"' + (dis ? ' disabled' : '') + '>' +
+          '<span class="d-week">' + d.week + '</span>' +
+          '<span class="d-lab">' + d.label + '</span>' +
+          '<span class="d-left">' + (d.state === 'closed' ? '休' :
+            d.state === 'full' ? '满' : '余' + d.left) + '</span>' +
+        '</button>'
+      }).join('') + '</div>'
+
+    // 选中那天的时段
+    var slots = SCH.daySlots(c0.doctor_id, state.recall.date, state.bookings)
+    if (slots.length && !slots.some(function (x) { return x.slot === state.recall.slot && !x.full })) {
+      var free = slots.filter(function (x) { return !x.full })[0]
+      state.recall.slot = free ? free.slot : slots[0].slot
+    }
+    $('recall-slot').innerHTML = slots.length
+      ? slots.map(function (x) {
+          return '<button class="chip' + (state.recall.slot === x.slot ? ' on' : '') +
+            (x.full ? ' dis' : '') + '" data-slot="' + x.slot + '"' + (x.full ? ' disabled' : '') + '>' +
+            x.label + ' <span class="chip-sub">' + x.time + ' · ' +
+            (x.full ? '已满' : '余 ' + x.left) + '</span></button>'
+        }).join('')
+      : '<div class="slot-none">这天不出诊，换一天</div>'
 
     function checks(list, group) {
       return list.map(function (o) {
@@ -568,8 +612,8 @@
     var c = findCase(state.currentId)
     if (!c) return ''
     var st = state.recall
-    var when = ''
-    RECALL_WHEN.forEach(function (o) { if (o.key === st.when) when = o.label })
+    var slotMeta = SCH.SLOTS[st.slot] || SCH.SLOTS.am
+    var when = SCH.dateText(st.date) + ' ' + slotMeta.label + '（' + slotMeta.time + '）'
 
     function picked(list, group) {
       var out = []
@@ -596,9 +640,69 @@
   function saveRecall() {
     var c = findCase(state.currentId)
     if (!c) return
-    c.recall_sent = { at: 'now', message: recallMessage() }
+    // 占掉一个名额：医生刚约出去的，主人端和这块看板都要立刻看到少了一个
+    state.bookings.push({
+      doctor_id: c.doctor_id, date: state.recall.date, slot: state.recall.slot,
+      case_id: c.id, pet_name: c.pet_name, owner_name: c.owner_name,
+    })
+    c.recall_sent = {
+      date: state.recall.date, slot: state.recall.slot, message: recallMessage(),
+    }
     $('recall-mask').hidden = true
-    toast('已通知 ' + c.owner_name + '，' + c.pet_name + '的主人会收到服务通知')
+    toast('已约 ' + SCH.dateText(state.recall.date) + ' ' +
+      (SCH.SLOTS[state.recall.slot] || {}).label + '，已通知 ' + c.owner_name)
+  }
+
+
+  // ────────────────── 我的日历 ──────────────────
+
+  function openCalendar() {
+    if (!state.calDoctor) {
+      state.calDoctor = (state.data.doctorList && state.data.doctorList[0].id) || 'doc_wang'
+    }
+    renderCalendar()
+    $('cal-mask').hidden = false
+  }
+
+  function renderCalendar() {
+    var docs = state.data.doctorList || []
+    $('cal-doctors').innerHTML = docs.map(function (d) {
+      return '<button class="chip' + (state.calDoctor === d.id ? ' on' : '') +
+        '" data-doc="' + d.id + '">' + esc(d.name) +
+        ' <span class="chip-sub">' + esc(d.title) + '</span></button>'
+    }).join('')
+
+    var cal = SCH.calendar(state.calDoctor, 14, state.bookings)
+    $('cal-body').innerHTML = cal.map(function (d) {
+      // 不出诊的日子也列出来。医生要一眼看到自己哪天休、哪天是手术日，
+      // 而不是在一串日期里数哪天不见了。
+      if (d.state === 'closed') {
+        return '<div class="calrow off">' +
+          '<div class="cal-date"><b>' + d.label + '</b><span>' + d.week + '</span></div>' +
+          '<div class="cal-slots"><span class="cal-off">不出诊</span></div></div>'
+      }
+      var mine = state.bookings.filter(function (b) {
+        return b.doctor_id === state.calDoctor && b.date === d.key
+      })
+      return '<div class="calrow' + (d.isToday ? ' today' : '') + '">' +
+        '<div class="cal-date"><b>' + d.label + '</b><span>' + d.week + '</span></div>' +
+        '<div class="cal-slots">' +
+          d.slots.map(function (x) {
+            var pct = Math.round((x.booked / x.capacity) * 100)
+            return '<div class="cal-slot' + (x.full ? ' full' : '') + '">' +
+              '<div class="cs-head"><span>' + x.label + '</span>' +
+              '<span class="cs-num">' + x.booked + '/' + x.capacity + '</span></div>' +
+              '<div class="cs-bar"><i style="width:' + pct + '%"></i></div>' +
+            '</div>'
+          }).join('') +
+          (mine.length
+            ? '<div class="cal-mine">复查：' + mine.map(function (b) {
+                return esc(b.pet_name) + '（' + esc(b.owner_name) + '）'
+              }).join('、') + '</div>'
+            : '') +
+        '</div>' +
+      '</div>'
+    }).join('')
   }
 
   function onAction(act) {

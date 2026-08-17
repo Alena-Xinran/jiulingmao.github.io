@@ -632,3 +632,113 @@ button { font-family: inherit; cursor: pointer; }
   max-height: 190px;
   overflow-y: auto;
 }
+
+/* ===== 日期条（通知来院 / 我的日历）===== */
+.daystrip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+.daybtn {
+  flex: none;
+  width: 58px;
+  padding: 8px 0 7px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.25;
+}
+.d-week { font-size: 11px; color: var(--text-mute); }
+.d-lab { font-size: 13px; font-weight: 700; color: var(--text); }
+.d-left { font-size: 11px; color: var(--green); }
+.daybtn.s-tight .d-left { color: var(--yellow); }
+.daybtn.s-full .d-left,
+.daybtn.s-closed .d-left { color: var(--text-mute); }
+.daybtn.dis { opacity: .45; cursor: not-allowed; background: #FBF7F2; }
+.daybtn.on {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.daybtn.on .d-week,
+.daybtn.on .d-lab,
+.daybtn.on .d-left { color: #fff; }
+
+.chip-sub { font-weight: 400; opacity: .75; font-size: 11.5px; }
+.chip.dis { opacity: .45; cursor: not-allowed; }
+.slot-none {
+  font-size: 13px;
+  color: var(--text-mute);
+  padding: 8px 2px;
+}
+
+/* ===== 我的日历 ===== */
+#cal-body { margin-top: 14px; max-height: 52vh; overflow-y: auto; }
+
+.calrow {
+  display: flex;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F3EBE1;
+}
+.calrow:last-child { border-bottom: none; }
+.calrow.today { background: #FBF7F2; border-radius: 8px; padding-left: 8px; }
+.calrow.off { opacity: .55; }
+
+.cal-date {
+  width: 52px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.cal-date b { font-size: 13px; color: var(--text); }
+.cal-date span { font-size: 11px; color: var(--text-mute); }
+
+.cal-slots { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.cal-slot {
+  flex: 1 1 120px;
+  background: #FBF7F2;
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.cal-slot.full { background: #FAEAE6; }
+.cs-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-bottom: 5px;
+}
+.cs-num { font-weight: 700; color: var(--text); }
+.cal-slot.full .cs-num { color: var(--red); }
+.cs-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: #EDE2D5;
+  overflow: hidden;
+}
+.cs-bar i {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+}
+.cal-slot.full .cs-bar i { background: var(--red); }
+.cal-off { font-size: 12px; color: var(--text-mute); padding: 7px 0; }
+
+/* 这天已经约出去的复查 */
+.cal-mine {
+  flex: 1 1 100%;
+  font-size: 12px;
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+  border-radius: 6px;
+  padding: 5px 9px;
+}
