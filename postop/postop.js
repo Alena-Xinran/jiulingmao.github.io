@@ -6,7 +6,7 @@
  * 所以默认视图只显示需要处理的，恢复正常的折起来不占注意力。
  *
  * 分级规则来自 shared/ai.js + shared/rules.js —— 和宠主端小程序是同一份，
- * 保证主人看到的结论和医生看到的一致。
+ * 保证家长看到的结论和医生看到的一致。
  */
 (function () {
   var RULES = window.PostopRules
@@ -24,6 +24,7 @@
     bookings: [],
     recall: { date: '', slot: 'am', bring: {}, care: {} },
     calDoctor: '',
+    session: null,
   }
 
   // ── 分桶 ──
@@ -31,16 +32,25 @@
   // 混进绿色里就等于把失联的病人当成康复的。
   var BUCKETS = [
     { key: 'todo', label: '需处理', hint: '红：建议今天联系', cls: 'red' },
+    { key: 'ask', label: '待回复', hint: '家长提了问题', cls: 'ask' },
     { key: 'yellow', label: '观察中', hint: '黄：盯着变化趋势', cls: 'yellow' },
     { key: 'silent', label: '失联', hint: '连续 2 天以上没上报', cls: 'silent' },
     { key: 'green', label: '恢复正常', hint: '不用管，折起来', cls: 'green' },
     { key: 'done', label: '已结束', hint: '跟诊周期已满', cls: 'done' },
   ]
 
+  /**
+   * 分桶。红色永远优先——问题再要紧也没有伤口要紧。
+   *
+   * 但「待回复」必须排在黄色之前，而且要能从绿色里捞出来：
+   * 恢复得好、只是想问个事的家长，如果落进绿色被折叠，那条问题就石沉大海了。
+   * 医生说的是「他提的问题医生看到之后回答他一下」——看不到就无从回答。
+   */
   function bucketOf(c) {
     if (c.finished) return 'done'
-    if (c.missed_days >= 2) return 'silent'
     if (c.level === 'red') return 'todo'
+    if (c.needs_reply) return 'ask'
+    if (c.missed_days >= 2) return 'silent'
     if (c.level === 'yellow') return 'yellow'
     return 'green'
   }
@@ -109,6 +119,9 @@
     }
     // 当天之内变差过 —— 整块看板里信号最强的一个，必须排在其它标签前面。
     // 「状态在往坏里走」比任何单点状态都值得医生先看一眼。
+    if (c.needs_reply) {
+      flags.push('<span class="tag tag-ask">家长提问</span>')
+    }
     if (latest && latest.escalated_today) {
       flags.push('<span class="tag tag-escalate">今天变差</span>')
     } else if (latest && latest.is_supplement) {
@@ -239,7 +252,7 @@
     }).join('')
 
     var adv = ai.advice.length
-      ? '<div class="sec-title" style="margin-top:16px">给主人的建议</div><ol class="adv-list">' +
+      ? '<div class="sec-title" style="margin-top:16px">给家长的建议</div><ol class="adv-list">' +
         ai.advice.map(function (a) { return '<li>' + esc(a) + '</li>' }).join('') + '</ol>'
       : ''
 
@@ -266,7 +279,7 @@
       : ''
 
     return '<div class="sec">' +
-      '<div class="sec-title">AI 初筛 <span class="sec-sub">基于照片 + 主人上报</span></div>' +
+      '<div class="sec-title">AI 初筛 <span class="sec-sub">基于照片 + 家长上报</span></div>' +
       '<div class="ai-head">' +
         '<span class="ai-sev lv-' + ai.level + '">' + esc(ai.severity_label) + '</span>' +
         '<span class="ai-conf">可信度 ' + esc(ai.confidence_label || '—') +
@@ -316,7 +329,7 @@
 
     var verdictTitle = bucket === 'silent'
       ? '已连续 ' + c.missed_days + ' 天没有上报'
-      : (c.level === 'red' ? '建议今天联系主人'
+      : (c.level === 'red' ? '建议今天联系家长'
         : c.level === 'yellow' ? '继续观察，留意变化趋势'
         : '恢复情况正常')
 
@@ -335,7 +348,7 @@
             ' · 主治 ' + esc(c.doctor_name) + '</div>' +
         '</div>' +
         '<div class="dt-actions">' +
-          '<button class="btn-primary" data-act="reply">回复主人</button>' +
+          '<button class="btn-primary" data-act="reply">回复家长</button>' +
           '<button class="btn-plain" data-act="recall">通知来院</button>' +
           '<button class="btn-plain" data-act="override">调整分级</button>' +
         '</div>' +
@@ -345,6 +358,16 @@
         '<div class="dv-title">' + verdictTitle + '</div>' +
         (reasons ? '<div class="dv-reasons">' + reasons + '</div>' : '') +
       '</div>' +
+
+      (c.needs_reply && c.question
+        ? '<div class="sec">' +
+            '<div class="askbox">' +
+              '<div class="ask-h">家长想问 <span class="ask-when">第 ' + c.question.day + ' 天 · ' + c.question.date + '</span></div>' +
+              '<div class="ask-q">' + esc(c.question.text) + '</div>' +
+              '<button class="btn-primary ask-btn" data-act="reply">回复这条</button>' +
+            '</div>' +
+          '</div>'
+        : '') +
 
       '<div class="sec">' +
         '<div class="sec-title">逐日趋势 <span class="sec-sub">点一天看当天记录；斜纹格是没上报</span></div>' +
@@ -362,7 +385,7 @@
         answersHtml(c, r)
 
       if (r.note) {
-        html += '<div class="sec"><div class="sec-title">主人补充</div>' +
+        html += '<div class="sec"><div class="sec-title">家长补充</div>' +
           '<div class="note-box">' + esc(r.note) + '</div></div>'
       }
       if (r.doctor_reply) {
@@ -372,7 +395,7 @@
       }
     } else {
       html += '<div class="sec"><div class="sec-title">还没有上报记录</div>' +
-        '<div style="color:var(--text-mute);font-size:13px">主人认领了病例但一次都没打卡，建议电话提醒。</div></div>'
+        '<div style="color:var(--text-mute);font-size:13px">家长认领了病例但一次都没打卡，建议电话提醒。</div></div>'
     }
 
     $('detail').innerHTML = html
@@ -509,7 +532,7 @@
   /**
    * 预设项。医生在诊间点这个的时候通常很赶，不该让他从零打字。
    * pre() 返回 true 的项会**按这个病例的实际情况预先勾上**——
-   * 比如主人报了没戴伊丽莎白圈，那「戴好防舔护具」就该默认勾上。
+   * 比如家长报了没戴伊丽莎白圈，那「戴好防舔护具」就该默认勾上。
    */
   var RECALL_BRING = [
     { key: 'record', label: '出院单 / 病历本', pre: function () { return true } },
@@ -605,7 +628,7 @@
     $('recall-preview').textContent = recallMessage()
   }
 
-  /** 拼出主人真正会收到的那条消息——医生发之前要能看见它长什么样 */
+  /** 拼出家长真正会收到的那条消息——医生发之前要能看见它长什么样 */
   function recallMessage() {
     var c = findCase(state.currentId)
     if (!c) return ''
@@ -638,7 +661,7 @@
   function saveRecall() {
     var c = findCase(state.currentId)
     if (!c) return
-    // 占掉一个名额：医生刚约出去的，主人端和这块看板都要立刻看到少了一个
+    // 占掉一个名额：医生刚约出去的，家长端和这块看板都要立刻看到少了一个
     state.bookings.push({
       doctor_id: c.doctor_id, date: state.recall.date, slot: state.recall.slot,
       case_id: c.id, pet_name: c.pet_name, owner_name: c.owner_name,
@@ -708,6 +731,14 @@
     if (!c) return
 
     if (act === 'reply') {
+      // 家长有问题就把原话摆在弹窗里——医生要针对它回，不能凭记忆
+      var qb = $('reply-question')
+      if (c.needs_reply && c.question) {
+        qb.innerHTML = '<div class="rq-h">家长问：</div><div class="rq-t">' + esc(c.question.text) + '</div>'
+        qb.hidden = false
+      } else {
+        qb.hidden = true
+      }
       $('reply-sub').textContent = c.pet_name + ' · ' + c.owner_name
       $('reply-text').value = ''
       $('reply-quick').innerHTML = QUICK_REPLIES.map(function (q) {
@@ -764,15 +795,129 @@
   function saveReply() {
     var c = findCase(state.currentId)
     var text = $('reply-text').value.trim()
+    // 先校验再改状态。写空了直接 return，不能把「待回复」标记也一并清掉。
     if (!c || !text) { toast('还没写内容'); return }
-    var r = state.selectedReport || c.latest
-    if (r) r.doctor_reply = { doctor_name: c.doctor_name, content: text, replied_at: Date.now() }
+
+    // 回复挂在家长提问的那条记录上；没有提问就挂最新一条
+    var target = null
+    if (c.needs_reply && c.question) {
+      c.reports.forEach(function (r) { if (r.id === c.question.report_id) target = r })
+    }
+    if (!target) target = state.selectedReport || c.latest
+    if (target) {
+      target.doctor_reply = { doctor_name: c.doctor_name, content: text, replied_at: Date.now() }
+      target.replied = true
+    }
+
+    // 问题结清：从「待回复」档里摘掉
+    if (c.needs_reply) {
+      c.needs_reply = false
+      c.question = null
+      c.sort_key = Math.max(0, (c.sort_key || 0) - 15)
+    }
+
     $('reply-mask').hidden = true
-    renderDetail()
-    toast('已发送给 ' + c.owner_name)
+    $('reply-text').value = ''
+    // 看板计数和分档都要跟着变，只重绘详情不够
+    renderAll()
+    toast('已回复 ' + c.owner_name)
   }
 
   // ────────────────── 启动 ──────────────────
+
+
+  // ────────────────── 登录门 ──────────────────
+
+  var SESSION_KEY = 'postop_doctor_session'
+
+  /**
+   * 这块看板上有家长姓名、手机号、宠物病历，不能对着公网敞开。
+   *
+   * 演示模式和真登录是**两条路**：演示进来的是 demo-cast 的假数据，
+   * 真登录才会去后端拉本院的真实病例。混在一起早晚会有人拿演示入口看到真数据。
+   */
+  function readSession() {
+    try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null') } catch (e) { return null }
+  }
+
+  function writeSession(v) {
+    try {
+      if (v) sessionStorage.setItem(SESSION_KEY, JSON.stringify(v))
+      else sessionStorage.removeItem(SESSION_KEY)
+    } catch (e) {}
+  }
+
+  function showGate() {
+    $('gate').hidden = false
+    $('app').hidden = true
+  }
+
+  function enterApp(session) {
+    state.session = session
+    writeSession(session)
+    $('gate').hidden = true
+    $('app').hidden = false
+    boot()
+  }
+
+
+  /**
+   * 深链：?case=<id> 直接打开某个病例，&act=recall 顺带展开「通知来院」，
+   * ?view=calendar 直接开日历。医生之间转发病例、或者从消息通知点进来时用。
+   */
+  function applyDeepLink() {
+    var q = {}
+    location.search.replace(/^\?/, '').split('&').forEach(function (kv) {
+      var i = kv.indexOf('=')
+      if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1))
+    })
+
+    if (q.view === 'calendar') { openCalendar(); return }
+    if (!q.case) return
+
+    var hit = findCase(q.case)
+    if (!hit) return
+    state.filter = 'all'
+    state.currentId = hit.id
+    renderAll()
+    if (q.act === 'recall') openRecall(hit)
+    if (q.act === 'reply') onAction('reply')
+    if (q.act === 'calendar') openCalendar()
+  }
+
+  function bindGate() {
+    $('gate-demo').addEventListener('click', function () {
+      enterApp({ mode: 'demo', name: '演示医生' })
+    })
+
+    $('gate-form').addEventListener('submit', function (e) {
+      e.preventDefault()
+      var user = $('gate-user').value.trim()
+      var pass = $('gate-pass').value
+      var err = $('gate-err')
+
+      if (!user || !pass) {
+        err.textContent = '请填写工号和密码'
+        err.hidden = false
+        return
+      }
+      // 真账号要走后端校验。前端没有后端可打，也绝不能在这里放行——
+      // 否则等于把「登录」做成了装饰。
+      err.textContent = '真实账号需要连接医院端后端，当前版本尚未接入。演示请点下面的按钮。'
+      err.hidden = false
+    })
+
+    // ?demo=1 直接进演示：给医生发链接时不用教他点按钮，
+    // 也方便截图。真数据仍然要过登录。
+    if (/[?&]demo=1\b/.test(location.search)) {
+      enterApp({ mode: 'demo', name: '演示医生' })
+      applyDeepLink()
+      return
+    }
+    var s = readSession()
+    if (s) enterApp(s)
+    else showGate()
+  }
 
   function boot() {
     state.data = window.PostopDemo.build()
@@ -787,5 +932,5 @@
   }
 
   bindEvents()
-  boot()
+  bindGate()
 })()

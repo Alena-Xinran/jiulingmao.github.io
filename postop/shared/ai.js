@@ -220,8 +220,8 @@ function mapRecord(record) {
 }
 
 /**
- * 把主人勾的问卷答案翻成 detect_postop 认识的 cat_context。
- * 让 AI 带着主人的自述读图，比盲看一张图准得多。
+ * 把家长勾的问卷答案翻成 detect_postop 认识的 cat_context。
+ * 让 AI 带着家长的自述读图，比盲看一张图准得多。
  *
  * opts.timeline = true 时声明这是同一伤口的时间序列，
  * 模型会走「纵向变化判断」分支并填 trend。
@@ -266,8 +266,8 @@ function buildContext(kase, answers, opts) {
 /**
  * 病例级分类 —— 医院看板按这个分桶。
  *
- * 输入是「主人问卷分级」和「AI 初筛结论」两条独立证据，取更保守的一个：
- * 主人看得见 AI 看不见的（食欲、精神、体温），AI 看得见主人看不出的（伤口边缘、渗出性质）。
+ * 输入是「家长问卷分级」和「AI 初筛结论」两条独立证据，取更保守的一个：
+ * 家长看得见 AI 看不见的（食欲、精神、体温），AI 看得见家长看不出的（伤口边缘、渗出性质）。
  * 谁报警都要算数——漏掉一个术后感染的代价，远大于多叫回来一只。
  */
 function classify(questionnaireLevel, aiReport, opts) {
@@ -280,7 +280,7 @@ function classify(questionnaireLevel, aiReport, opts) {
   if (aiLevel && ORDER[aiLevel] > ORDER[level]) level = aiLevel
 
   var reasons = []
-  if (ORDER[qLevel] > 0) reasons.push('主人上报有异常项')
+  if (ORDER[qLevel] > 0) reasons.push('家长上报有异常项')
   if (aiLevel && ORDER[aiLevel] > 0) reasons.push('AI 初筛：' + aiReport.severity_label)
 
   // 恶化趋势单独升一级：连续两天都是黄、但一天比一天差，比单点的黄更值得叫回来
@@ -303,13 +303,19 @@ function classify(questionnaireLevel, aiReport, opts) {
     reasons.push('已连续 ' + opts.missedDays + ' 天未上报')
   }
 
+  // 家长提了问题等着回复。**不改分级**——恢复得好就是绿的，
+  // 但医生端要单独成一档，否则「一切正常 + 想问个事」会被折叠掉，问题就石沉大海了。
+  if (opts.needsReply) reasons.push('家长有问题等回复')
+
   return {
     level: level,
     escalated: escalated,
+    needs_reply: !!opts.needsReply,
     reasons: reasons,
     // 医生看板排序：红 > 黄 > 漏报 > 绿；同级内恶化趋势排前
     sort_key: (ORDER[level] * 100)
       + (aiReport && aiReport.trend === 'worsening' ? 20 : 0)
+      + (opts.needsReply ? 15 : 0)
       + (opts.missedDays ? Math.min(10, opts.missedDays) : 0),
   }
 }

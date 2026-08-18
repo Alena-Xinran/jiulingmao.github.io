@@ -2,13 +2,13 @@
  * 术后跟诊 · 问卷定义 + 红黄绿分级规则
  *
  * 设计原则（来自宠物医生的原话）：
- *   「轻微红肿 AI 不一定判断得准」→ 所以判断主体是主人勾选的结构化选项，不是 AI。
+ *   「轻微红肿 AI 不一定判断得准」→ 所以判断主体是家长勾选的结构化选项，不是 AI。
  *   「有问题医生就可以直接看到」→ 所以每一项都要能映射到红/黄/绿，医生看板按此排序。
  *
  * 物种（猫/狗）只影响体温阈值和少量文案，不影响问卷主体。
  * 真正决定问哪些题的是「术式」（procedure），不是物种。
  *
- * 前端这套规则给主人**即时反馈**用；医生看板以服务端判定为准（服务端应复用同一份规则）。
+ * 前端这套规则给家长**即时反馈**用；医生看板以服务端判定为准（服务端应复用同一份规则）。
  */
 
 var LEVEL = {
@@ -408,7 +408,7 @@ function missingRequired(answers, procedureKey) {
   return missing
 }
 
-/** 给主人看的结论文案。红色必须明确说「现在就联系医生」，不能含糊。 */
+/** 给家长看的结论文案。红色必须明确说「现在就联系医生」，不能含糊。 */
 function summaryText(result, species) {
   var who = speciesLabel(species)
   if (result.level === LEVEL.RED) {
@@ -429,7 +429,7 @@ function summaryText(result, species) {
   }
 }
 
-/** 红旗项的具体提示，逐条列给主人看 */
+/** 红旗项的具体提示，逐条列给家长看 */
 function flagNotes(result) {
   var notes = []
   result.reds.forEach(function (key) {

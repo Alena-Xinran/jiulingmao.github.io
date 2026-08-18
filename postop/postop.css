@@ -742,3 +742,129 @@ button { font-family: inherit; cursor: pointer; }
   border-radius: 6px;
   padding: 5px 9px;
 }
+
+/* ===== 登录门 ===== */
+.gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'><g fill='%23FFFCF5' fill-opacity='0.10'><g transform='translate(35 40) rotate(-15)'><ellipse cx='0' cy='10' rx='14' ry='12'/><ellipse cx='-18' cy='-8' rx='6' ry='8'/><ellipse cx='-8' cy='-18' rx='6' ry='8'/><ellipse cx='8' cy='-18' rx='6' ry='8'/><ellipse cx='18' cy='-8' rx='6' ry='8'/></g></g></svg>") 0 0 / 140px 140px repeat,
+    linear-gradient(160deg, #D4A574 0%, #A9713F 100%);
+  z-index: 200;
+}
+.gate-card {
+  width: min(400px, 100%);
+  background: #FFF;
+  border-radius: 18px;
+  padding: 34px 30px 26px;
+  box-shadow: 0 24px 60px rgba(60, 40, 20, .34);
+  text-align: center;
+}
+.gate-brand { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: 1px; }
+.gate-sub { margin-top: 7px; font-size: 13px; color: var(--text-mute); }
+
+.gate-input {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+  background: #FBF7F2;
+  box-sizing: border-box;
+}
+.gate-input:focus { outline: none; border-color: var(--primary); background: #FFF; }
+
+.gate-err {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--red-soft);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #9E3B2C;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.gate-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 0;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #D4B896 0%, #C8A07E 100%);
+  color: #FFF;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  cursor: pointer;
+}
+
+.gate-demo {
+  width: 100%;
+  margin-top: 22px;
+  padding: 11px 0;
+  border: 1px dashed #DCCDBA;
+  border-radius: 999px;
+  background: #FBF7F2;
+  color: var(--primary-dark);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gate-note {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  color: var(--text-mute);
+  line-height: 1.65;
+}
+
+/* ===== 家长提问（待回复）===== */
+.stat.ask { border-left-color: #7A8FA6; }
+.stat.ask .stat-num { color: #5C748F; }
+
+.tag-ask {
+  background: #E4EAF1;
+  color: #47617D;
+  font-weight: 700;
+}
+.row.lv-ask { border-left-color: #7A8FA6; }
+
+/* 详情页里家长的问题：医生一眼要看到原话 */
+.askbox {
+  background: #F2F6FA;
+  border: 1px solid #D6E0EA;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.ask-h {
+  font-size: 13px;
+  font-weight: 800;
+  color: #47617D;
+  margin-bottom: 8px;
+}
+.ask-when { font-weight: 400; color: #8AA0B5; margin-left: 6px; }
+.ask-q {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--text);
+  padding: 12px 14px;
+  background: #fff;
+  border-radius: 8px;
+}
+.ask-btn { margin-top: 12px; }
+
+/* 回复弹窗顶部：把家长原话摆出来，别让医生凭记忆回 */
+.reply-question {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #F2F6FA;
+  border: 1px solid #D6E0EA;
+  border-radius: 10px;
+}
+.rq-h { font-size: 12px; font-weight: 700; color: #47617D; margin-bottom: 5px; }
+.rq-t { font-size: 13.5px; line-height: 1.75; color: var(--text); }

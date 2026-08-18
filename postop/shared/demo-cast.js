@@ -1,7 +1,7 @@
 /**
  * 术后跟诊 · 演示剧本（宠主端和医生端共用同一批人）
  *
- * 两端必须是同一份数据，演示时才能「主人端填一条 → 医生端立刻看到这只」。
+ * 两端必须是同一份数据，演示时才能「家长端填一条 → 医生端立刻看到这只」。
  * 各自造数据的话，现场一对不上就穿帮了。
  *
  * 剧本是刻意设计的，一屏里要能同时看到：
@@ -28,14 +28,18 @@
     { id: 'doc_chen', name: '陈医生', title: '骨科专科', phone: '400-820-1121' },
   ]
 
+  /**
+   * phone_full 是医院开单时登记的号码，用于「授权手机号一键匹配」；
+   * phone 是脱敏版，只用于医生端展示——工作台上没必要摊开完整号码。
+   */
   var OWNERS = [
-    { id: 'own_zhang', name: '张女士', phone: '138****2041' },
-    { id: 'own_li', name: '李先生', phone: '139****7735' },
-    { id: 'own_wang', name: '王先生', phone: '136****5182' },
+    { id: 'own_zhang', name: '张女士', phone: '138****2041', phone_full: '13800002041' },
+    { id: 'own_li', name: '李先生', phone: '139****7735', phone_full: '13900007735' },
+    { id: 'own_wang', name: '王先生', phone: '136****5182', phone_full: '13600005182' },
   ]
 
   /**
-   * 7 只宠物 / 3 个主人（都养多只）/ 2 个医生 / 4 种术式。
+   * 7 只宠物 / 3 个家长（都养多只）/ 2 个医生 / 4 种术式。
    * script 决定这只的恢复走向，见下面的 dayPlan。
    */
   var PETS = [
@@ -156,11 +160,29 @@
     return null
   }
 
-  /** 主人写的备注 */
-  function noteFor(script, day, isToday) {
-    if (script === 'worsening' && isToday) return '今天下午开始一直躲在床底下不出来，叫也不理'
-    if (script === 'slow' && day === 3) return '别的都挺好，就是那条腿一直提着不肯落地'
-    if (script === 'recovering' && day === 2) return '结痂掉了一小块，不知道要不要紧'
+  /**
+   * 家长写的备注。ask=true 表示他勾了「想请医生回复」——
+   * 医生端会单独成一档，绿色病例也不会被折叠掉。
+   */
+  function noteFor(script, day, isToday, procKey) {
+    if (script === 'worsening' && isToday) {
+      return { text: '今天下午开始一直躲在床底下不出来，叫也不理' }
+    }
+    if (script === 'slow' && day === 3) {
+      return { text: '别的都挺好，就是那条腿一直提着不肯落地。是不是该带去拍个片子？还是再等等？', ask: true }
+    }
+    // 恢复得很好，但有个问题想问——这条最能说明「绿色不能折叠」
+    if (script === 'smooth' && day === 3) {
+      return {
+        text: procKey === 'dental'
+          ? '拔牙那边看着好多了，想问下什么时候能恢复吃干粮？现在一直喂罐头它有点腻了。'
+          : '伤口看着都长好了，想问下什么时候能给它洗澡？还有伊丽莎白圈能摘了吗？',
+        ask: true,
+      }
+    }
+    if (script === 'recovering' && day === 2) {
+      return { text: '结痂掉了一小块，不知道要不要紧' }
+    }
     return ''
   }
 
@@ -198,8 +220,8 @@
       escalation_triggers: ['发红范围较今天扩大，或颜色转深转紫', '出现黄绿色渗出物或异味', '触碰时明显疼痛、躲避或哈气', '体温超过 39.5℃'],
     },
     vet: {
-      diagnosis: '切口区域外观异常，结合主人上报的情况，符合需要尽快由兽医处理的表现。',
-      wound_assessment: '切口周围充血范围较广，局部可见渗出与结痂混杂，边缘贴合不良。图像与主人报告的红旗项一致。',
+      diagnosis: '切口区域外观异常，结合家长上报的情况，符合需要尽快由兽医处理的表现。',
+      wound_assessment: '切口周围充血范围较广，局部可见渗出与结痂混杂，边缘贴合不良。图像与家长报告的红旗项一致。',
       healing_stage: '炎症期，存在延迟愈合迹象',
       observations: { tissue: '切口周围组织色泽不均，局部可疑失活', inflammation: '充血范围超过 2cm，边界不清', moisture: '可见渗出物附着', edges: '边缘贴合不良，存在分离' },
       advice: ['尽快联系主治医生，携带这份记录和照片到院', '路上给防舔护具戴好，不要让它继续舔舐', '不要自行清创、挤压或使用任何外用药', '记录最后一次进食和排便时间，到院时告诉医生'],
@@ -255,8 +277,8 @@
       ],
     },
     vet: {
-      diagnosis: '拔牙创面表现异常，结合主人上报的情况，符合需要尽快由兽医处理的表现。',
-      wound_assessment: '创面可见持续渗血或脓性分泌物，牙龈红肿明显，缝线可能已撕脱。图像与主人报告的红旗项一致。',
+      diagnosis: '拔牙创面表现异常，结合家长上报的情况，符合需要尽快由兽医处理的表现。',
+      wound_assessment: '创面可见持续渗血或脓性分泌物，牙龈红肿明显，缝线可能已撕脱。图像与家长报告的红旗项一致。',
       healing_stage: '愈合受阻，需排查感染或创面裂开',
       observations: {
         tissue: '牙龈组织色泽不均，创缘可疑失活',
@@ -297,7 +319,7 @@
           trend: trend,
           wound_assessment: t.wound_assessment,
           severity_level: severity,
-          escalation_reason: severity === 'vet' ? '图像表现与主人上报的红旗项一致，取更保守结论' : '',
+          escalation_reason: severity === 'vet' ? '图像表现与家长上报的红旗项一致，取更保守结论' : '',
           confidence: confidence,
           confidence_reason: '',
           impression: t.diagnosis,
@@ -345,7 +367,12 @@
         var entries = []
 
         var plan = dayPlan(p.script, d, proc.days)
-        if (plan) entries.push({ plan: plan, note: noteFor(p.script, d, isToday) })
+        if (plan) {
+          var n = noteFor(p.script, d, isToday, p.procedure)
+          var nText = typeof n === 'string' ? n : (n && n.text) || ''
+          var nAsk = !!(n && n.ask)
+          entries.push({ plan: plan, note: nText, ask: nAsk })
+        }
 
         var sup = supplementPlan(p.script, d, isToday)
         if (sup && plan) entries.push({ plan: sup, note: sup.note, supplement: true })
@@ -390,6 +417,9 @@
             yellows: qResult.yellows,
             ai_report: aiReport,
             note: entry.note || '',
+            needs_reply: !!entry.ask,
+            // 医生已回复过的就不再挂着（worsening 那条 day1 有回复）
+            replied: false,
             has_photo: proc.photo,
             photos: proc.photo ? [{ url: '', path: '', qc: null }] : [],
             doctor_reply: idx === 0 ? replyFor(p.script, d, doctor.name) : null,
@@ -411,10 +441,15 @@
       }
 
       var latest = reports[0] || null
+      // 还没被回复的提问：不限今天，前天问的没回也得挂着
+      var openQ = null
+      reports.forEach(function (r) {
+        if (r.needs_reply && !r.replied && !openQ) openQ = r
+      })
       var cls2 = AI.classify(
         latest ? latest.questionnaire_level : 'green',
         latest ? latest.ai_report : null,
-        { missedDays: missedDays }
+        { missedDays: missedDays, needsReply: !!openQ }
       )
 
       cases.push({
@@ -438,6 +473,7 @@
         owner_id: owner.id,
         owner_name: owner.name,
         owner_phone: owner.phone,
+        owner_phone_full: owner.phone_full,
         hospital_name: HOSPITAL,
         doctor_id: doctor.id,
         doctor_name: doctor.name,
@@ -448,6 +484,10 @@
         reports: reports,
         latest: latest,
         missed_days: missedDays,
+        needs_reply: !!openQ,
+        question: openQ ? {
+          report_id: openQ.id, day: openQ.day, date: openQ.date, text: openQ.note,
+        } : null,
         level: cls2.level,
         classify_reasons: cls2.reasons,
         sort_key: cls2.sort_key,
