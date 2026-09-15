@@ -868,3 +868,11 @@ button { font-family: inherit; cursor: pointer; }
 }
 .rq-h { font-size: 12px; font-weight: 700; color: #47617D; margin-bottom: 5px; }
 .rq-t { font-size: 13.5px; line-height: 1.75; color: var(--text); }
+
+
+/* 家长一天可以问很多条，详情页和弹窗都要能列出来 */
+.ask-one { padding: 10px 0; border-bottom: 1px dashed rgba(0,0,0,.08); }
+.ask-one:last-of-type { border-bottom: none; }
+.askbox .ask-when { display:block; margin-bottom: 4px; font-size: 11px; opacity: .62; }
+.rq-t + .rq-t { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(0,0,0,.1); }
+.rq-when { display:block; margin-bottom: 3px; font-size: 11px; opacity: .6; }

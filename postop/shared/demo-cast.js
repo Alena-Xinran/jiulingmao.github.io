@@ -186,6 +186,37 @@
     return ''
   }
 
+  /**
+   * 额外的提问。提问和打卡是两条独立的路径——
+   * 家长可以一天问好几次，也可以完全不打卡只是问一句。
+   * 返回 [{ dayAgo, hourOffset, text }]，dayAgo=0 是今天。
+   */
+  function extraQuestions(script, procKey) {
+    if (script === 'worsening') {
+      return [
+        { dayAgo: 0, hourOffset: 2, text: '刚量了体温 39.6，是不是有点高了？需要现在就送过来吗' },
+        { dayAgo: 0, hourOffset: 5, text: '它今天一整天都窝在角落不出来，水也喝得少。' },
+      ]
+    }
+    if (script === 'smooth' && procKey === 'dental') {
+      return [
+        { dayAgo: 0, hourOffset: 3, text: '现在能换回原来的猫粮了吗？泡软的它有点不爱吃。' },
+        { dayAgo: 1, hourOffset: 4, text: '缝线的地方看着有点白白的东西，是正常的吗？' },
+      ]
+    }
+    if (script === 'slow') {
+      return [
+        { dayAgo: 0, hourOffset: 6, text: '牵引散步的时候它还是不太敢用那条腿，需要加量吗' },
+      ]
+    }
+    if (script === 'smooth') {
+      return [
+        { dayAgo: 0, hourOffset: 4, text: '拆线是要回医院还是可以自己在家弄？' },
+      ]
+    }
+    return []
+  }
+
   /** 医生回复 */
   function replyFor(script, day, doctorName) {
     if (script === 'worsening' && day === 1) {
@@ -441,15 +472,48 @@
       }
 
       var latest = reports[0] || null
-      // 还没被回复的提问：不限今天，前天问的没回也得挂着
-      var openQ = null
+
+      // ── 提问：独立对象，一天可以有很多条 ──
+      var questions = []
+      // (a) 打卡时勾了「想请医生回复」的，迁成一条提问
       reports.forEach(function (r) {
-        if (r.needs_reply && !r.replied && !openQ) openQ = r
+        if (!r.needs_reply) return
+        questions.push({
+          id: r.id + '_q',
+          case_id: p.id,
+          day: r.day,
+          date: r.date,
+          text: r.note,
+          created_at: r.created_at,
+          from_report_id: r.id,
+          answer: r.doctor_reply
+            ? { content: r.doctor_reply.content, doctor_name: doctor.name,
+                replied_at: r.created_at + 7200000 }
+            : null,
+        })
       })
+      // (b) 不走打卡、单独问的
+      extraQuestions(p.script, p.procedure).forEach(function (q, qi) {
+        var d = p.day - q.dayAgo
+        if (d < 0) return
+        questions.push({
+          id: p.id + '_xq' + qi,
+          case_id: p.id,
+          day: d,
+          date: dateStr(q.dayAgo),
+          text: q.text,
+          created_at: Date.now() - q.dayAgo * 86400000 - q.hourOffset * 3600000,
+          from_report_id: '',
+          answer: null,
+        })
+      })
+      questions.sort(function (a, b) { return b.created_at - a.created_at })
+      var openQs = questions.filter(function (q) { return !q.answer })
+      var openQ = openQs.length ? openQs[openQs.length - 1] : null
       var cls2 = AI.classify(
         latest ? latest.questionnaire_level : 'green',
         latest ? latest.ai_report : null,
-        { missedDays: missedDays, needsReply: !!openQ }
+        { missedDays: missedDays, needsReply: openQs.length > 0 }
       )
 
       cases.push({
@@ -484,9 +548,14 @@
         reports: reports,
         latest: latest,
         missed_days: missedDays,
-        needs_reply: !!openQ,
+        questions: questions,
+        open_questions: openQs,
+        open_question_count: openQs.length,
+        needs_reply: openQs.length > 0,
+        // 单数字段保留：医生端旧渲染路径还在用，指向最早那条未回复的
         question: openQ ? {
-          report_id: openQ.id, day: openQ.day, date: openQ.date, text: openQ.note,
+          id: openQ.id, report_id: openQ.from_report_id,
+          day: openQ.day, date: openQ.date, text: openQ.text,
         } : null,
         level: cls2.level,
         classify_reasons: cls2.reasons,

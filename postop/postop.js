@@ -9,6 +9,7 @@
  * 保证家长看到的结论和医生看到的一致。
  */
 (function () {
+  if (window.PostopLive && !/[?&]demo=1\b/.test(location.search)) { window.PostopLive.start(); return }
   var RULES = window.PostopRules
   var AI = window.PostopAI
 
@@ -46,6 +47,13 @@
    * 恢复得好、只是想问个事的家长，如果落进绿色被折叠，那条问题就石沉大海了。
    * 医生说的是「他提的问题医生看到之后回答他一下」——看不到就无从回答。
    */
+  /** 某个病例当前还没回复的提问。家长一天可以问很多条，这里全都要拿到 */
+  function openQs(c) {
+    if (!c) return []
+    if (c.open_questions) return c.open_questions
+    return (c.questions || []).filter(function (q) { return !q.answer })
+  }
+
   function bucketOf(c) {
     if (c.finished) return 'done'
     if (c.level === 'red') return 'todo'
@@ -119,8 +127,9 @@
     }
     // 当天之内变差过 —— 整块看板里信号最强的一个，必须排在其它标签前面。
     // 「状态在往坏里走」比任何单点状态都值得医生先看一眼。
-    if (c.needs_reply) {
-      flags.push('<span class="tag tag-ask">家长提问</span>')
+    if (openQs(c).length) {
+      var qn = openQs(c).length
+      flags.push('<span class="tag tag-ask">家长提问' + (qn > 1 ? ' ' + qn : '') + '</span>')
     }
     if (latest && latest.escalated_today) {
       flags.push('<span class="tag tag-escalate">今天变差</span>')
@@ -213,31 +222,7 @@
   }
 
   function compareHtml(c) {
-    var withPhoto = c.reports.filter(function (r) { return r.has_photo })
-    var today = withPhoto[0]
-    var prev = withPhoto[1]
-    function cell(r, cap) {
-      if (!r) {
-        return '<div class="cmp-item"><div class="cmp-ph">暂无照片</div>' +
-          '<div class="cmp-cap">' + cap + '</div></div>'
-      }
-      // demo 没有真图，用占位块表达「这里是同角度对比」
-      var target = c.photo_target || '伤口'
-      return '<div class="cmp-item"><div class="cmp-ph">第 ' + r.day + ' 天' +
-        (r.is_supplement ? ' 补报' : '') + '<br>' + esc(target) + '</div>' +
-        '<div class="cmp-cap">' + cap + '</div></div>'
-    }
-    // 同一天的两条（打卡 + 补报）要能分清，否则两张都写「第 5 天」看不出比的是什么
-    function cap(r, prefix) {
-      if (!r) return ''
-      var sameDay = prev && today && prev.day === today.day
-      if (sameDay) return prefix + '（第 ' + r.day + ' 天 第 ' + (r.seq || 1) + ' 次）'
-      return prefix + '（第 ' + r.day + ' 天）'
-    }
-    return '<div class="compare">' +
-      cell(prev, prev ? cap(prev, '上一次') : '暂无历史') +
-      cell(today, today ? cap(today, '最新') : '今天未上报') +
-      '</div>'
+    return window.PostopPhotoHistory.render(c, c.reports)
   }
 
   function aiHtml(r) {
@@ -359,12 +344,21 @@
         (reasons ? '<div class="dv-reasons">' + reasons + '</div>' : '') +
       '</div>' +
 
-      (c.needs_reply && c.question
+      (openQs(c).length
         ? '<div class="sec">' +
             '<div class="askbox">' +
-              '<div class="ask-h">家长想问 <span class="ask-when">第 ' + c.question.day + ' 天 · ' + c.question.date + '</span></div>' +
-              '<div class="ask-q">' + esc(c.question.text) + '</div>' +
-              '<button class="btn-primary ask-btn" data-act="reply">回复这条</button>' +
+              '<div class="ask-h">家长想问' +
+                (openQs(c).length > 1 ? '（' + openQs(c).length + ' 条）' : '') +
+              '</div>' +
+              openQs(c).map(function (q) {
+                return '<div class="ask-one">' +
+                  '<div class="ask-when">第 ' + q.day + ' 天 · ' + q.date + '</div>' +
+                  '<div class="ask-q">' + esc(q.text) + '</div>' +
+                '</div>'
+              }).join('') +
+              '<button class="btn-primary ask-btn" data-act="reply">' +
+                (openQs(c).length > 1 ? '一起回复' : '回复这条') +
+              '</button>' +
             '</div>' +
           '</div>'
         : '') +
@@ -733,8 +727,15 @@
     if (act === 'reply') {
       // 家长有问题就把原话摆在弹窗里——医生要针对它回，不能凭记忆
       var qb = $('reply-question')
-      if (c.needs_reply && c.question) {
-        qb.innerHTML = '<div class="rq-h">家长问：</div><div class="rq-t">' + esc(c.question.text) + '</div>'
+      var qs = openQs(c)
+      if (qs.length) {
+        qb.innerHTML =
+          '<div class="rq-h">家长问' + (qs.length > 1 ? '了 ' + qs.length + ' 条，一次回完就行' : '：') + '</div>' +
+          qs.map(function (q) {
+            return '<div class="rq-t">' +
+              (qs.length > 1 ? '<span class="rq-when">第 ' + q.day + ' 天 · ' + q.date + '</span>' : '') +
+              esc(q.text) + '</div>'
+          }).join('')
         qb.hidden = false
       } else {
         qb.hidden = true
@@ -798,19 +799,32 @@
     // 先校验再改状态。写空了直接 return，不能把「待回复」标记也一并清掉。
     if (!c || !text) { toast('还没写内容'); return }
 
-    // 回复挂在家长提问的那条记录上；没有提问就挂最新一条
-    var target = null
-    if (c.needs_reply && c.question) {
-      c.reports.forEach(function (r) { if (r.id === c.question.report_id) target = r })
-    }
-    if (!target) target = state.selectedReport || c.latest
-    if (target) {
-      target.doctor_reply = { doctor_name: c.doctor_name, content: text, replied_at: Date.now() }
-      target.replied = true
+    // 一条回复结清当前所有待回复的提问——家长可能一天问了好几条，
+    // 医生看到的是一组，回一次就应该全部结清。
+    var qs = openQs(c)
+    var answer = { doctor_name: c.doctor_name, content: text, replied_at: Date.now() }
+    qs.forEach(function (q) { q.answer = answer })
+
+    // 提问如果是从打卡里勾出来的，同一条也挂到那次记录上，详情页看得到
+    var touched = {}
+    qs.forEach(function (q) {
+      if (!q.from_report_id || touched[q.from_report_id]) return
+      touched[q.from_report_id] = 1
+      c.reports.forEach(function (r) {
+        if (r.id !== q.from_report_id) return
+        r.doctor_reply = answer
+        r.replied = true
+      })
+    })
+    if (!qs.length) {
+      var target = state.selectedReport || c.latest
+      if (target) { target.doctor_reply = answer; target.replied = true }
     }
 
     // 问题结清：从「待回复」档里摘掉
-    if (c.needs_reply) {
+    if (qs.length) {
+      c.open_questions = []
+      c.open_question_count = 0
       c.needs_reply = false
       c.question = null
       c.sort_key = Math.max(0, (c.sort_key || 0) - 15)
@@ -820,7 +834,7 @@
     $('reply-text').value = ''
     // 看板计数和分档都要跟着变，只重绘详情不够
     renderAll()
-    toast('已回复 ' + c.owner_name)
+    toast(qs.length > 1 ? '已一并回复 ' + qs.length + ' 条' : '已回复 ' + c.owner_name)
   }
 
   // ────────────────── 启动 ──────────────────
