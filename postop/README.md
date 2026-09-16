@@ -18,7 +18,12 @@ cd jiulingmao.github.io && python3 -m http.server 8899
 
 推上去之后是 https://www.jiulingmao.com/postop/
 
-数据全在浏览器里生成（`demo-data.js`），不连后端、不写服务器，可以直接给医生演示。
+两种模式，登录门上分两条路：
+
+- **演示**：点「给医生演示」或 `?demo=1`。数据在浏览器里生成（`demo-data.js`），不连后端、不写服务器。
+- **真实账号**：手机号 + 密码登录，打 `cat_server` 内嵌的跟诊模块（`index.html` 里的 `window.POSTOP_API_BASE`，默认 `https://api.jiulingmao.com`），和家长端小程序同一个库。医生在这里回复，家长小程序首页立刻能看到。本地联调加 `?api=http://127.0.0.1:8005`。
+
+真实模式下：回复家长走 `POST /clinic/cases/{id}/answers`；「通知来院」走 `POST /clinic/cases/{id}/bookings`，家长首页会显示这条预约和医生的话；「我的日历」可直接编辑未来两周每个半天的容量（`PUT /clinic/schedule`），家长端按这个放号。「调整分级」走 `POST /clinic/cases/{id}/override`：改判挂在当前最新上报上，家长再报一次就按系统重新判；每次改判留档（`postop_overrides`），用来校准 `rules.js` 的阈值。
 
 ## 分桶规则
 
@@ -65,8 +70,9 @@ demo 过了、医生认可了，再决定是合并进 `doctor/` 还是独立成�
 
 ## 待办
 
-- [ ] 接真后端（现在是 `demo-data.js`），接口契约见 `postop_front/README.md` 第五节
-- [ ] 照片对比现在是占位块，接后端后换成真图 + 放大对比
-- [ ] 医生登录（可复用 `doctor/` 的登录态）
+- [x] 接真后端（演示仍走 `demo-data.js`）
+- [x] 照片对比：真实模式显示真图，点击放大
+- [x] 医生登录（跟诊医生账号，`/api/v1/postop/clinic/login`）
+- [x] 真实模式的「调整分级」（`/clinic/cases/{id}/override`）
 - [ ] 改判数据回流，用来校准 `rules.js` 的阈值
 - [ ] 品牌：现在挂在 jiulingmao.com 下，正式给医院用要换中性域名

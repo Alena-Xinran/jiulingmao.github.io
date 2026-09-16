@@ -20,12 +20,187 @@
     keyword: '',
     currentId: null,
     overrideLevel: '',
-    // 本次会话里新约出去的号，叠加在排班的基础占用之上
+    // 本次会话里新约出去的号，叠加在排班的基础占用之上（演示模式）
     bookings: [],
     recall: { date: '', slot: 'am', bring: {}, care: {} },
     calDoctor: '',
     session: null,
+    // 真后端模式：医生自己的排班和已约号，来自服务端
+    profile: null,
+    realSlots: [],
+    realBookings: [],
   }
+
+  // ────────────────── 真后端 ──────────────────
+  // 演示模式和真登录是两条路：演示用 demo-cast 的假数据，真登录才打 cat_server。
+
+  // ?api=http://127.0.0.1:8005 可临时指到本地后端（记在 sessionStorage，关标签页即失效）
+  var API_BASE = (function () {
+    var m = /[?&]api=([^&]+)/.exec(location.search)
+    try {
+      if (m) sessionStorage.setItem('postop_api_base', decodeURIComponent(m[1]))
+      var saved = sessionStorage.getItem('postop_api_base')
+      if (saved) return saved.replace(/\/$/, '')
+    } catch (e) {}
+    return (window.POSTOP_API_BASE || 'https://api.jiulingmao.com').replace(/\/$/, '')
+  })()
+  var P = '/api/v1/postop'
+
+  function isReal() { return !!(state.session && state.session.mode === 'real') }
+
+  function api(path, method, body) {
+    var token = state.session && state.session.token
+    return fetch(API_BASE + path, {
+      method: method || 'GET',
+      headers: Object.assign({ 'Content-Type': 'application/json' },
+        token ? { Authorization: 'Bearer ' + token } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(function (res) {
+      return res.json().catch(function () { return {} }).then(function (data) {
+        if (res.status === 401) {
+          var e = new Error(data.detail || '登录已过期，请重新登录')
+          e.auth = true
+          throw e
+        }
+        if (!res.ok) throw new Error(data.detail || data.message || ('请求失败 ' + res.status))
+        return data
+      })
+    }, function () {
+      throw new Error('连不上服务器 ' + API_BASE)
+    })
+  }
+
+  /** 服务端的 ai_report 是模型原始输出，转成页面认识的形状（和家长端同一份 mapRecord） */
+  function mapServerReport(r) {
+    var raw = r.ai_report
+    r.ai_raw = raw || null
+    r.ai_status = raw && raw.status ? raw.status : (raw ? 'completed' : 'none')
+    r.ai_report = (raw && (!raw.status || raw.status === 'completed'))
+      ? AI.mapRecord({ status: 'done', raw_report: raw }).report
+      : null
+    r.has_photo = !!(r.photos && r.photos.length)
+    r.replied = !!r.doctor_reply
+    r.answers = r.answers || {}
+    return r
+  }
+
+  /** decorate() 出来的病例 → 看板要的字段。缺的补上，别让渲染层到处判空 */
+  function mapServerCase(c) {
+    var prof = state.profile || {}
+    c.owner_name = c.owner_name || '家长'
+    c.breed = c.breed || ''
+    c.doctor_id = c.staff_id
+    c.doctor_name = c.doctor_name || prof.name || ''
+    c.doctor_phone = c.doctor_phone || prof.phone || ''
+    c.hospital_name = c.hospital_name || prof.clinic_name || ''
+    c.reports = (c.reports || []).map(mapServerReport)
+    c.latest = c.reports.length ? c.reports[0] : null
+    return c
+  }
+
+  function loadReal() {
+    return Promise.all([
+      api(P + '/clinic/profile'),
+      api(P + '/clinic/board'),
+      api(P + '/clinic/schedule').catch(function () { return { slots: [] } }),
+      api(P + '/clinic/bookings').catch(function () { return { bookings: [] } }),
+    ]).then(function (res) {
+      state.profile = res[0].profile || {}
+      state.realSlots = res[2].slots || []
+      state.realBookings = res[3].bookings || []
+      var me = state.profile
+      state.data = {
+        hospital: me.clinic_name || '',
+        doctorList: [{ id: me.id, name: me.name, title: me.title || '', phone: me.phone }],
+        doctors: [me.name],
+        owners: [],
+        cases: (res[1].cases || []).map(mapServerCase),
+      }
+    })
+  }
+
+  function reloadRealCase(id) {
+    return api(P + '/clinic/cases/' + id).then(function (res) {
+      var fresh = mapServerCase(res.case)
+      state.data.cases = state.data.cases.map(function (c) { return c.id === id ? fresh : c })
+      return fresh
+    })
+  }
+
+  function handleApiError(err) {
+    if (err && err.auth) {
+      writeSession(null)
+      state.session = null
+      showGate()
+      var el = $('gate-err')
+      el.textContent = err.message
+      el.hidden = false
+      return
+    }
+    toast(err && err.message ? err.message : '出错了')
+  }
+
+  /**
+   * 真后端模式的排班：形状和 shared/schedule.js 一样（calendar / daySlots / firstOpen），
+   * 数据换成服务端 postop_doctor_slots + postop_bookings，医生和家长看到的余量才是同一份。
+   */
+  function makeRealSched() {
+    var byKey = {}
+    state.realSlots.forEach(function (s) { byKey[s.date + '|' + s.slot] = s })
+    function bookedCount(key, slot, extra) {
+      var n = 0
+      state.realBookings.forEach(function (b) {
+        if (b.date === key && b.slot === slot && (b.status || 'booked') === 'booked') n++
+      })
+      ;(extra || []).forEach(function (b) { if (b.date === key && b.slot === slot) n++ })
+      return n
+    }
+    function daySlots(_doc, key, extra) {
+      return SCH.SLOT_ORDER.filter(function (s) {
+        var cfg = byKey[key + '|' + s]
+        return cfg && cfg.capacity > 0
+      }).map(function (s) {
+        var cfg = byKey[key + '|' + s]
+        var meta = SCH.SLOTS[s]
+        var booked = Math.min(cfg.capacity, bookedCount(key, s, extra))
+        return { slot: s, label: meta.label, time: meta.time, capacity: cfg.capacity,
+          booked: booked, left: cfg.capacity - booked, full: booked >= cfg.capacity }
+      })
+    }
+    function dayStatus(doc, key, extra) {
+      var slots = daySlots(doc, key, extra)
+      if (!slots.length) return { key: key, state: 'closed', left: 0, slots: [] }
+      var left = slots.reduce(function (n, s) { return n + s.left }, 0)
+      return { key: key, state: left === 0 ? 'full' : (left <= 2 ? 'tight' : 'open'), left: left, slots: slots }
+    }
+    function calendar(doc, days, extra, fromKey) {
+      var out = []
+      for (var i = 0; i < (days || 14); i++) {
+        var key = SCH.toKey(SCH.addDays(i, fromKey))
+        var st = dayStatus(doc, key, extra)
+        out.push({ key: key, label: SCH.labelOf(key), week: SCH.weekOf(key), text: SCH.dateText(key),
+          isToday: i === 0 && !fromKey, isWeekend: [0, 6].indexOf(SCH.parseKey(key).getDay()) >= 0,
+          state: st.state, left: st.left, slots: st.slots })
+      }
+      return out
+    }
+    function firstOpen(doc, extra, opts) {
+      opts = opts || {}
+      var cal = calendar(doc, opts.days || 14, extra)
+      for (var i = 0; i < cal.length; i++) {
+        if (opts.skipToday && cal[i].isToday) continue
+        for (var j = 0; j < cal[i].slots.length; j++) {
+          if (!cal[i].slots[j].full) return { date: cal[i].key, slot: cal[i].slots[j].slot }
+        }
+      }
+      return null
+    }
+    return { SLOTS: SCH.SLOTS, SLOT_ORDER: SCH.SLOT_ORDER, todayKey: SCH.todayKey, dateText: SCH.dateText,
+      toKey: SCH.toKey, parseKey: SCH.parseKey, addDays: SCH.addDays, labelOf: SCH.labelOf, weekOf: SCH.weekOf,
+      daySlots: daySlots, dayStatus: dayStatus, calendar: calendar, firstOpen: firstOpen }
+  }
+
+  function sched() { return isReal() ? makeRealSched() : SCH }
 
   // ── 分桶 ──
   // silent（漏报）单独成一档：医生说的是「每天上报」，没报本身就是信号，
@@ -46,6 +221,13 @@
    * 恢复得好、只是想问个事的家长，如果落进绿色被折叠，那条问题就石沉大海了。
    * 医生说的是「他提的问题医生看到之后回答他一下」——看不到就无从回答。
    */
+  /** 某个病例当前还没回复的提问。家长一天可以问很多条，这里全都要拿到 */
+  function openQs(c) {
+    if (!c) return []
+    if (c.open_questions) return c.open_questions
+    return (c.questions || []).filter(function (q) { return !q.answer })
+  }
+
   function bucketOf(c) {
     if (c.finished) return 'done'
     if (c.level === 'red') return 'todo'
@@ -119,8 +301,9 @@
     }
     // 当天之内变差过 —— 整块看板里信号最强的一个，必须排在其它标签前面。
     // 「状态在往坏里走」比任何单点状态都值得医生先看一眼。
-    if (c.needs_reply) {
-      flags.push('<span class="tag tag-ask">家长提问</span>')
+    if (openQs(c).length) {
+      var qn = openQs(c).length
+      flags.push('<span class="tag tag-ask">家长提问' + (qn > 1 ? ' ' + qn : '') + '</span>')
     }
     if (latest && latest.escalated_today) {
       flags.push('<span class="tag tag-escalate">今天变差</span>')
@@ -221,6 +404,11 @@
         return '<div class="cmp-item"><div class="cmp-ph">暂无照片</div>' +
           '<div class="cmp-cap">' + cap + '</div></div>'
       }
+      var url = r.photos && r.photos[0] && r.photos[0].url
+      if (url) {
+        return '<div class="cmp-item"><img class="cmp-img" src="' + esc(url) + '" alt="第 ' + r.day + ' 天">' +
+          '<div class="cmp-cap">' + cap + '</div></div>'
+      }
       // demo 没有真图，用占位块表达「这里是同角度对比」
       var target = c.photo_target || '伤口'
       return '<div class="cmp-item"><div class="cmp-ph">第 ' + r.day + ' 天' +
@@ -243,8 +431,13 @@
   function aiHtml(r) {
     var ai = r && r.ai_report
     if (!ai) {
+      var why = '这次没有照片或分析未完成。'
+      if (r && r.ai_raw) {
+        if (r.ai_status === 'pending' || r.ai_status === 'running') why = 'AI 正在分析照片，稍后刷新。'
+        else if (r.ai_raw.message) why = r.ai_raw.message
+      }
       return '<div class="sec"><div class="sec-title">AI 初筛</div>' +
-        '<div style="color:var(--text-mute);font-size:13px">这次没有照片或分析未完成。</div></div>'
+        '<div class="ai-pending">' + esc(why) + '</div></div>'
     }
     var obs = ai.observations.map(function (o) {
       return '<div class="kv"><span class="kv-k">' + esc(o.label) + '</span>' +
@@ -350,7 +543,7 @@
         '<div class="dt-actions">' +
           '<button class="btn-primary" data-act="reply">回复家长</button>' +
           '<button class="btn-plain" data-act="recall">通知来院</button>' +
-          '<button class="btn-plain" data-act="override">调整分级</button>' +
+          '<button class="btn-plain" data-act="override">' + (c.override ? '已改判 · 调整' : '调整分级') + '</button>' +
         '</div>' +
       '</div>' +
 
@@ -359,12 +552,21 @@
         (reasons ? '<div class="dv-reasons">' + reasons + '</div>' : '') +
       '</div>' +
 
-      (c.needs_reply && c.question
+      (openQs(c).length
         ? '<div class="sec">' +
             '<div class="askbox">' +
-              '<div class="ask-h">家长想问 <span class="ask-when">第 ' + c.question.day + ' 天 · ' + c.question.date + '</span></div>' +
-              '<div class="ask-q">' + esc(c.question.text) + '</div>' +
-              '<button class="btn-primary ask-btn" data-act="reply">回复这条</button>' +
+              '<div class="ask-h">家长想问' +
+                (openQs(c).length > 1 ? '（' + openQs(c).length + ' 条）' : '') +
+              '</div>' +
+              openQs(c).map(function (q) {
+                return '<div class="ask-one">' +
+                  '<div class="ask-when">第 ' + q.day + ' 天 · ' + q.date + '</div>' +
+                  '<div class="ask-q">' + esc(q.text) + '</div>' +
+                '</div>'
+              }).join('') +
+              '<button class="btn-primary ask-btn" data-act="reply">' +
+                (openQs(c).length > 1 ? '一起回复' : '回复这条') +
+              '</button>' +
             '</div>' +
           '</div>'
         : '') +
@@ -384,6 +586,12 @@
         aiHtml(r) +
         answersHtml(c, r)
 
+      if (r.photos && r.photos.length > 1 && r.photos[1].url) {
+        html += '<div class="sec"><div class="sec-title">这次的其它照片</div><div class="compare">' +
+          r.photos.slice(1).map(function (p) {
+            return '<div class="cmp-item"><img class="cmp-img" src="' + esc(p.url) + '" alt=""></div>'
+          }).join('') + '</div></div>'
+      }
       if (r.note) {
         html += '<div class="sec"><div class="sec-title">家长补充</div>' +
           '<div class="note-box">' + esc(r.note) + '</div></div>'
@@ -455,6 +663,13 @@
         return
       }
 
+      var img = e.target.closest('.cmp-img')
+      if (img && img.src) {
+        $('lightbox-img').src = img.src
+        $('lightbox').hidden = false
+        return
+      }
+
       if (e.target.id === 'lightbox' || e.target.closest('#lightbox')) {
         $('lightbox').hidden = true
       }
@@ -467,12 +682,22 @@
 
     $('btn-refresh').addEventListener('click', function () {
       boot()
-      toast('已重新生成演示数据')
+      toast(isReal() ? '已刷新' : '已重新生成演示数据')
     })
+
+    $('btn-logout').addEventListener('click', function () {
+      writeSession(null)
+      state.session = null
+      state.data = null
+      showGate()
+    })
+
+    $('cal-save').addEventListener('click', saveSchedule)
 
     // 改判
     $('override-cancel').addEventListener('click', function () { $('override-mask').hidden = true })
-    $('override-save').addEventListener('click', saveOverride)
+    $('override-save').addEventListener('click', function () { saveOverride(false) })
+    $('override-clear').addEventListener('click', function () { saveOverride(true) })
     $('override-levels').addEventListener('click', function (e) {
       var b = e.target.closest('.lv-opt')
       if (!b) return
@@ -565,10 +790,11 @@
   function openRecall(c) {
     var r = state.selectedReport || c.latest
     // 红色病例默认排今天（挤也要挤进去），其余从明天起找第一个收得下的
-    var pick = SCH.firstOpen(c.doctor_id, state.bookings, { skipToday: c.level !== 'red' })
-      || SCH.firstOpen(c.doctor_id, state.bookings)
+    var S = sched()
+    var pick = S.firstOpen(c.doctor_id, state.bookings, { skipToday: c.level !== 'red' })
+      || S.firstOpen(c.doctor_id, state.bookings)
     state.recall = {
-      date: pick ? pick.date : SCH.todayKey(),
+      date: pick ? pick.date : S.todayKey(),
       slot: pick ? pick.slot : 'am',
       bring: {},
       care: {},
@@ -586,7 +812,8 @@
 
   function renderRecall() {
     var c0 = findCase(state.currentId)
-    var cal = SCH.calendar(c0.doctor_id, 14, state.bookings)
+    var S = sched()
+    var cal = S.calendar(c0.doctor_id, 14, state.bookings)
 
     // 日期条：不出诊的也画出来（灰掉），否则医生会以为是系统漏了那天
     $('recall-when').innerHTML =
@@ -602,7 +829,7 @@
       }).join('') + '</div>'
 
     // 选中那天的时段
-    var slots = SCH.daySlots(c0.doctor_id, state.recall.date, state.bookings)
+    var slots = S.daySlots(c0.doctor_id, state.recall.date, state.bookings)
     if (slots.length && !slots.some(function (x) { return x.slot === state.recall.slot && !x.full })) {
       var free = slots.filter(function (x) { return !x.full })[0]
       state.recall.slot = free ? free.slot : slots[0].slot
@@ -614,7 +841,9 @@
             x.label + ' <span class="chip-sub">' + x.time + ' · ' +
             (x.full ? '已满' : '余 ' + x.left) + '</span></button>'
         }).join('')
-      : '<div class="slot-none">这天不出诊，换一天</div>'
+      : '<div class="slot-none">' + (isReal() && !state.realSlots.length
+          ? '还没有设置出诊排班。先在右上角「我的日历」里填每个半天收几个。'
+          : '这天不出诊，换一天') + '</div>'
 
     function checks(list, group) {
       return list.map(function (o) {
@@ -634,7 +863,7 @@
     if (!c) return ''
     var st = state.recall
     var slotMeta = SCH.SLOTS[st.slot] || SCH.SLOTS.am
-    var when = SCH.dateText(st.date) + ' ' + slotMeta.label + '（' + slotMeta.time + '）'
+    var when = sched().dateText(st.date) + ' ' + slotMeta.label + '（' + slotMeta.time + '）'
 
     function picked(list, group) {
       var out = []
@@ -661,6 +890,24 @@
   function saveRecall() {
     var c = findCase(state.currentId)
     if (!c) return
+    if (isReal()) {
+      var msg = recallMessage()
+      var btn = $('recall-save')
+      btn.disabled = true
+      api(P + '/clinic/cases/' + c.id + '/bookings', 'POST',
+        { date: state.recall.date, slot: state.recall.slot, note: msg }
+      ).then(function (res) {
+        btn.disabled = false
+        // 家长可能之前自己约过，服务端已把旧的作废；本地同步一下
+        state.realBookings = state.realBookings.filter(function (b) { return b.case_id !== c.id })
+        state.realBookings.push(Object.assign({ pet_name: c.pet_name, owner_phone: c.owner_phone, status: 'booked' }, res.booking))
+        c.recall_sent = { date: state.recall.date, slot: state.recall.slot, message: msg }
+        $('recall-mask').hidden = true
+        toast('已约 ' + SCH.dateText(state.recall.date) + ' ' +
+          (SCH.SLOTS[state.recall.slot] || {}).label + '，家长小程序首页会看到')
+      }).catch(function (err) { btn.disabled = false; handleApiError(err) })
+      return
+    }
     // 占掉一个名额：医生刚约出去的，家长端和这块看板都要立刻看到少了一个
     state.bookings.push({
       doctor_id: c.doctor_id, date: state.recall.date, slot: state.recall.slot,
@@ -678,11 +925,64 @@
   // ────────────────── 我的日历 ──────────────────
 
   function openCalendar() {
-    if (!state.calDoctor) {
+    if (!state.calDoctor || (isReal() && state.profile)) {
       state.calDoctor = (state.data.doctorList && state.data.doctorList[0].id) || 'doc_wang'
     }
     renderCalendar()
     $('cal-mask').hidden = false
+  }
+
+  /** 真后端模式：日历里直接改每个半天的容量，0 = 不出诊。保存后家长端立刻按这个放号 */
+  function renderCalendarEditable() {
+    var days = []
+    for (var i = 0; i < 14; i++) {
+      var key = SCH.toKey(SCH.addDays(i))
+      days.push(key)
+    }
+    var byKey = {}
+    state.realSlots.forEach(function (s) { byKey[s.date + '|' + s.slot] = s })
+    $('cal-hint').hidden = false
+    $('cal-hint').textContent = '每个半天填能收几个复查（0 = 不出诊）。已约数按家长和你约的号实时算。'
+    $('cal-save').hidden = false
+    return days.map(function (key, i) {
+      var mine = state.realBookings.filter(function (b) { return b.date === key && (b.status || 'booked') === 'booked' })
+      return '<div class="calrow' + (i === 0 ? ' today' : '') + '">' +
+        '<div class="cal-date"><b>' + SCH.labelOf(key) + '</b><span>' + SCH.weekOf(key) + '</span></div>' +
+        '<div class="cal-slots">' +
+          SCH.SLOT_ORDER.map(function (s) {
+            var cfg = byKey[key + '|' + s]
+            var cap = cfg ? cfg.capacity : 0
+            var booked = mine.filter(function (b) { return b.slot === s }).length
+            return '<div class="cal-slot' + (cap && booked >= cap ? ' full' : '') + '">' +
+              '<div class="cs-head"><span>' + SCH.SLOTS[s].label + '</span>' +
+              '<span class="cs-num">' + booked + '/' + cap + '</span></div>' +
+              '<div class="cap-row">收 <input class="cap-in" type="number" min="0" max="100" value="' + cap +
+                '" data-date="' + key + '" data-slot="' + s + '"> 个</div>' +
+            '</div>'
+          }).join('') +
+          (mine.length
+            ? '<div class="cal-mine">复查：' + mine.map(function (b) {
+                return esc(b.pet_name || b.case_id) + (b.owner_phone ? '（' + esc(b.owner_phone) + '）' : '')
+              }).join('、') + '</div>'
+            : '') +
+        '</div></div>'
+    }).join('')
+  }
+
+  function saveSchedule() {
+    var inputs = Array.prototype.slice.call(document.querySelectorAll('#cal-body .cap-in'))
+    var slots = inputs.map(function (el) {
+      var n = parseInt(el.value, 10)
+      return { date: el.dataset.date, slot: el.dataset.slot, capacity: isNaN(n) ? 0 : Math.max(0, Math.min(100, n)) }
+    })
+    var btn = $('cal-save')
+    btn.disabled = true
+    api(P + '/clinic/schedule', 'PUT', { slots: slots }).then(function (res) {
+      btn.disabled = false
+      state.realSlots = res.slots || []
+      renderCalendar()
+      toast('排班已保存')
+    }).catch(function (err) { btn.disabled = false; handleApiError(err) })
   }
 
   function renderCalendar() {
@@ -692,6 +992,13 @@
         '" data-doc="' + d.id + '">' + esc(d.name) +
         ' <span class="chip-sub">' + esc(d.title) + '</span></button>'
     }).join('')
+
+    if (isReal()) {
+      $('cal-body').innerHTML = renderCalendarEditable()
+      return
+    }
+    $('cal-hint').hidden = true
+    $('cal-save').hidden = true
 
     var cal = SCH.calendar(state.calDoctor, 14, state.bookings)
     $('cal-body').innerHTML = cal.map(function (d) {
@@ -733,8 +1040,19 @@
     if (act === 'reply') {
       // 家长有问题就把原话摆在弹窗里——医生要针对它回，不能凭记忆
       var qb = $('reply-question')
-      if (c.needs_reply && c.question) {
-        qb.innerHTML = '<div class="rq-h">家长问：</div><div class="rq-t">' + esc(c.question.text) + '</div>'
+      var qs = openQs(c)
+      if (isReal() && !qs.length) {
+        toast('家长现在没有提问。要联系家长请用「通知来院」或直接打电话。')
+        return
+      }
+      if (qs.length) {
+        qb.innerHTML =
+          '<div class="rq-h">家长问' + (qs.length > 1 ? '了 ' + qs.length + ' 条，一次回完就行' : '：') + '</div>' +
+          qs.map(function (q) {
+            return '<div class="rq-t">' +
+              (qs.length > 1 ? '<span class="rq-when">第 ' + q.day + ' 天 · ' + q.date + '</span>' : '') +
+              esc(q.text) + '</div>'
+          }).join('')
         qb.hidden = false
       } else {
         qb.hidden = true
@@ -755,10 +1073,12 @@
 
     if (act === 'override') {
       state.overrideLevel = c.level
-      $('override-sub').textContent = c.pet_name + ' 当前为' +
-        ({ red: '需处理', yellow: '观察中', green: '正常' }[c.level] || '未分类') +
-        '。改判会记进病例，也用来校准规则。'
-      $('override-note').value = ''
+      var LV = { red: '需处理', yellow: '观察中', green: '正常' }
+      $('override-sub').textContent = c.pet_name + ' 当前为' + (LV[c.level] || '未分类') +
+        (c.override && c.system_level ? '（系统判定：' + (LV[c.system_level] || c.system_level) + '）' : '') +
+        '。改判挂在这次上报上，家长再报一次就按系统重新判；每次改判都会记下来用于校准规则。'
+      $('override-clear').hidden = !(isReal() && c.override)
+      $('override-note').value = (c.override && c.override.note) || ''
       renderOverrideLevels()
       $('override-mask').hidden = false
     }
@@ -777,9 +1097,24 @@
     }).join('')
   }
 
-  function saveOverride() {
+  function saveOverride(clear) {
     var c = findCase(state.currentId)
     if (!c) return
+    if (isReal()) {
+      var level = clear ? '' : (state.overrideLevel || c.level)
+      var btn = $('override-save')
+      btn.disabled = true
+      api(P + '/clinic/cases/' + c.id + '/override', 'POST', { level: level, note: $('override-note').value.trim() })
+        .then(function () { return reloadRealCase(c.id) })
+        .then(function (fresh) {
+          btn.disabled = false
+          $('override-mask').hidden = true
+          renderAll()
+          toast(clear ? '已恢复系统判定' : '已调整为' + ({ red: '需处理', yellow: '观察中', green: '正常' }[fresh.level]))
+        })
+        .catch(function (err) { btn.disabled = false; handleApiError(err) })
+      return
+    }
     var was = c.level
     c.level = state.overrideLevel || c.level
     c.classify_reasons = ['医生改判（原：' + ({ red: '需处理', yellow: '观察中', green: '正常' }[was] || was) + '）']
@@ -798,19 +1133,54 @@
     // 先校验再改状态。写空了直接 return，不能把「待回复」标记也一并清掉。
     if (!c || !text) { toast('还没写内容'); return }
 
-    // 回复挂在家长提问的那条记录上；没有提问就挂最新一条
-    var target = null
-    if (c.needs_reply && c.question) {
-      c.reports.forEach(function (r) { if (r.id === c.question.report_id) target = r })
+    if (isReal()) {
+      var ids = openQs(c).map(function (q) { return q.id })
+      var btn = $('reply-save')
+      btn.disabled = true
+      api(P + '/clinic/cases/' + c.id + '/answers', 'POST', { content: text, question_ids: ids })
+        .then(function () { return reloadRealCase(c.id) })
+        .then(function () {
+          btn.disabled = false
+          $('reply-mask').hidden = true
+          $('reply-text').value = ''
+          state.selectedReport = null
+          renderAll()
+          toast(ids.length > 1 ? '已一并回复 ' + ids.length + ' 条，家长会在小程序看到' : '已回复，家长会在小程序看到')
+        })
+        .catch(function (err) {
+          btn.disabled = false
+          handleApiError(err)
+          if (/刷新|已回复/.test(err.message || '')) reloadRealCase(c.id).then(renderAll)
+        })
+      return
     }
-    if (!target) target = state.selectedReport || c.latest
-    if (target) {
-      target.doctor_reply = { doctor_name: c.doctor_name, content: text, replied_at: Date.now() }
-      target.replied = true
+
+    // 一条回复结清当前所有待回复的提问——家长可能一天问了好几条，
+    // 医生看到的是一组，回一次就应该全部结清。
+    var qs = openQs(c)
+    var answer = { doctor_name: c.doctor_name, content: text, replied_at: Date.now() }
+    qs.forEach(function (q) { q.answer = answer })
+
+    // 提问如果是从打卡里勾出来的，同一条也挂到那次记录上，详情页看得到
+    var touched = {}
+    qs.forEach(function (q) {
+      if (!q.from_report_id || touched[q.from_report_id]) return
+      touched[q.from_report_id] = 1
+      c.reports.forEach(function (r) {
+        if (r.id !== q.from_report_id) return
+        r.doctor_reply = answer
+        r.replied = true
+      })
+    })
+    if (!qs.length) {
+      var target = state.selectedReport || c.latest
+      if (target) { target.doctor_reply = answer; target.replied = true }
     }
 
     // 问题结清：从「待回复」档里摘掉
-    if (c.needs_reply) {
+    if (qs.length) {
+      c.open_questions = []
+      c.open_question_count = 0
       c.needs_reply = false
       c.question = null
       c.sort_key = Math.max(0, (c.sort_key || 0) - 15)
@@ -820,7 +1190,7 @@
     $('reply-text').value = ''
     // 看板计数和分档都要跟着变，只重绘详情不够
     renderAll()
-    toast('已回复 ' + c.owner_name)
+    toast(qs.length > 1 ? '已一并回复 ' + qs.length + ' 条' : '已回复 ' + c.owner_name)
   }
 
   // ────────────────── 启动 ──────────────────
@@ -897,14 +1267,26 @@
       var err = $('gate-err')
 
       if (!user || !pass) {
-        err.textContent = '请填写工号和密码'
+        err.textContent = '请填写手机号和密码'
         err.hidden = false
         return
       }
-      // 真账号要走后端校验。前端没有后端可打，也绝不能在这里放行——
-      // 否则等于把「登录」做成了装饰。
-      err.textContent = '真实账号需要连接医院端后端，当前版本尚未接入。演示请点下面的按钮。'
-      err.hidden = false
+      err.hidden = true
+      var btn = $('gate-submit')
+      btn.disabled = true
+      btn.textContent = '登录中…'
+      state.session = null
+      api(P + '/clinic/login', 'POST', { phone: user, password: pass }).then(function (res) {
+        btn.disabled = false
+        btn.textContent = '登 录'
+        $('gate-pass').value = ''
+        enterApp({ mode: 'real', token: res.token, staff: res.staff || {}, name: (res.staff || {}).name })
+      }).catch(function (e2) {
+        btn.disabled = false
+        btn.textContent = '登 录'
+        err.textContent = e2.message || '登录失败'
+        err.hidden = false
+      })
     })
 
     // ?demo=1 直接进演示：给医生发链接时不用教他点按钮，
@@ -919,16 +1301,42 @@
     else showGate()
   }
 
-  function boot() {
-    state.data = window.PostopDemo.build()
+  function afterLoad() {
     state.selectedReport = null
+    var tag = $('mode-tag')
+    if (isReal()) {
+      tag.textContent = '已连接 · ' + (state.profile.name || '') + (state.profile.title ? ' ' + state.profile.title : '')
+      tag.classList.add('real')
+    } else {
+      tag.textContent = '演示数据 · 不写服务器'
+      tag.classList.remove('real')
+    }
     $('brand-sub').textContent = state.data.hospital + ' · 共 ' + state.data.cases.length + ' 个跟诊中病例'
 
     // 默认选中第一个需处理的——医生打开就该看到最该看的那个
-    var todo = state.data.cases.filter(function (c) { return bucketOf(c) === 'todo' })
-      .sort(function (a, b) { return b.sort_key - a.sort_key })
-    state.currentId = todo.length ? todo[0].id : null
+    var keep = state.currentId && findCase(state.currentId)
+    if (!keep) {
+      var todo = state.data.cases.filter(function (c) { return bucketOf(c) === 'todo' })
+        .sort(function (a, b) { return b.sort_key - a.sort_key })
+      // 没有红色时选最该看的那个（提问 / 失联排在前面），而不是列表第一个
+      var ranked = state.data.cases.slice().sort(function (a, b) { return b.sort_key - a.sort_key })
+      state.currentId = todo.length ? todo[0].id : (ranked[0] ? ranked[0].id : null)
+      if (todo.length === 0 && state.filter === 'todo') state.filter = 'all'
+    }
     renderAll()
+  }
+
+  function boot() {
+    if (isReal()) {
+      $('brand-sub').textContent = '正在从服务器读取病例…'
+      loadReal().then(function () {
+        afterLoad()
+        applyDeepLink()
+      }).catch(handleApiError)
+      return
+    }
+    state.data = window.PostopDemo.build()
+    afterLoad()
   }
 
   bindEvents()

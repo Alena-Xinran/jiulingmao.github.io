@@ -868,3 +868,22 @@ button { font-family: inherit; cursor: pointer; }
 }
 .rq-h { font-size: 12px; font-weight: 700; color: #47617D; margin-bottom: 5px; }
 .rq-t { font-size: 13.5px; line-height: 1.75; color: var(--text); }
+
+
+/* 家长一天可以问很多条，详情页和弹窗都要能列出来 */
+.ask-one { padding: 10px 0; border-bottom: 1px dashed rgba(0,0,0,.08); }
+.ask-one:last-of-type { border-bottom: none; }
+.askbox .ask-when { display:block; margin-bottom: 4px; font-size: 11px; opacity: .62; }
+.rq-t + .rq-t { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(0,0,0,.1); }
+.rq-when { display:block; margin-bottom: 3px; font-size: 11px; opacity: .6; }
+
+/* ===== 真后端模式 ===== */
+.demo-tag.real { background: rgba(78, 154, 99, 0.35); }
+.cmp-img { cursor: zoom-in; object-fit: cover; }
+.cal-hint { font-size: 12px; color: var(--text-mute); margin: 6px 0 10px; }
+.cap-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-sub); }
+.cap-in {
+  width: 54px; padding: 4px 6px; border: 1px solid var(--line, #E3DBD0); border-radius: 6px;
+  font-size: 13px; text-align: center; background: #FFF;
+}
+.ai-pending { color: var(--text-mute); font-size: 13px; }
