@@ -396,6 +396,8 @@
   }
 
   function compareHtml(c) {
+    // 逐日照片时间线（photo-history.js）：每天最新一张做封面，点开看当天全部
+    if (window.PostopPhotoHistory) return window.PostopPhotoHistory.render(c, c.reports)
     var withPhoto = c.reports.filter(function (r) { return r.has_photo })
     var today = withPhoto[0]
     var prev = withPhoto[1]
@@ -606,7 +608,209 @@
         '<div style="color:var(--text-mute);font-size:13px">家长认领了病例但一次都没打卡，建议电话提醒。</div></div>'
     }
 
+    if (isReal()) {
+      html += '<div class="sec" id="records-sec"><div class="sec-title">宠物病历 <span class="sec-sub">同一只宠物历次治疗共用；AI 读图时会参考摘要</span></div>' +
+        '<div class="ai-pending">读取中…</div></div>'
+    }
+
     $('detail').innerHTML = html
+    if (isReal()) loadRecords(c)
+  }
+
+  // ────────────────── 病历（真实模式） ──────────────────
+
+  var WOUND_TYPES = {
+    surgical_incision_closed: '闭合手术切口', open_wound: '开放创面', puncture_or_bite: '穿刺 / 咬伤',
+    abscess_suspected: '疑似脓肿', avulsion_degloving: '撕脱伤', burn: '烧烫伤',
+    contusion_closed: '闭合挫伤', undetermined: '待判定',
+  }
+
+  function loadRecords(c) {
+    api(P + '/clinic/cases/' + c.id + '/medical-records').then(function (res) {
+      var box = $('records-sec')
+      if (!box || state.currentId !== c.id) return
+      var list = (res.records || []).map(function (r) {
+        return '<div class="rec-item"><span class="rec-title">' + esc(r.title) + '</span>' +
+          '<span class="rec-meta">' + esc(r.record_date) + '</span>' +
+          (r.url ? ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">附件</a>' : '') +
+          (r.summary ? '<div class="rec-sum">' + esc(r.summary) + '</div>' : '') + '</div>'
+      }).join('') || '<div class="ai-pending">还没有病历。</div>'
+      box.innerHTML = '<div class="sec-title">宠物病历 <span class="sec-sub">同一只宠物历次治疗共用；AI 读图时会参考摘要</span></div>' +
+        list +
+        '<form class="rec-form fm-grid" id="rec-form" data-case="' + esc(c.id) + '">' +
+          '<label class="fm-field">标题<input name="title" required maxlength="100" placeholder="如：绝育术后出院小结"></label>' +
+          '<label class="fm-field">日期<input name="record_date" type="date" value="' + SCH.todayKey() + '" required></label>' +
+          '<label class="fm-field fm-full">摘要（供 AI 和历史对比参考）<textarea name="summary" maxlength="10000"></textarea></label>' +
+          '<label class="fm-field fm-full">附件（图片或 PDF，可不传）<input type="file" name="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>' +
+          '<div class="fm-full"><button type="submit" class="btn-plain">保存病历</button></div>' +
+        '</form>'
+      $('rec-form').addEventListener('submit', function (e) {
+        e.preventDefault()
+        var f = e.target
+        var body = new FormData(f)
+        if (!body.get('file') || !body.get('file').size) body.delete('file')
+        if (!String(body.get('title') || '').trim()) { toast('病历标题不能为空'); return }
+        var btn = f.querySelector('button')
+        btn.disabled = true
+        apiForm(P + '/clinic/cases/' + c.id + '/medical-records', body).then(function () {
+          toast('病历已保存')
+          loadRecords(c)
+        }).catch(function (err) { btn.disabled = false; handleApiError(err) })
+      })
+    }).catch(function (err) {
+      var box = $('records-sec')
+      if (box) box.innerHTML = '<div class="sec-title">宠物病历</div><div class="ai-pending">' + esc(err.message) + '</div>'
+    })
+  }
+
+  /** multipart 上传（病历附件）。和 api() 一样处理 401 / 错误文案 */
+  function apiForm(path, formData) {
+    var token = state.session && state.session.token
+    return fetch(API_BASE + path, {
+      method: 'POST', body: formData,
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+    }).then(function (res) {
+      return res.json().catch(function () { return {} }).then(function (data) {
+        if (res.status === 401) { var e = new Error(data.detail || '登录已过期'); e.auth = true; throw e }
+        if (!res.ok) throw new Error(data.detail || '请求失败 ' + res.status)
+        return data
+      })
+    }, function () { throw new Error('连不上服务器 ' + API_BASE) })
+  }
+
+  // ────────────────── 通用表单弹窗：注册 / 新建病例 / 医生简介 ──────────────────
+
+  var formState = { onSave: null }
+
+  function field(label, name, opts) {
+    opts = opts || {}
+    var attrs = ' name="' + name + '"' + (opts.required ? ' required' : '') +
+      (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') +
+      (opts.attrs || '')
+    var inner
+    if (opts.options) {
+      inner = '<select' + attrs + '>' + Object.keys(opts.options).map(function (k) {
+        return '<option value="' + esc(k) + '"' + (opts.value === k ? ' selected' : '') + '>' + esc(opts.options[k]) + '</option>'
+      }).join('') + '</select>'
+    } else if (opts.textarea) {
+      inner = '<textarea' + attrs + '>' + esc(opts.value || '') + '</textarea>'
+    } else {
+      inner = '<input type="' + (opts.type || 'text') + '"' + attrs + ' value="' + esc(opts.value || '') + '">'
+    }
+    return '<label class="fm-field' + (opts.full ? ' fm-full' : '') + '">' + esc(label) + inner + '</label>'
+  }
+
+  function openForm(title, sub, bodyHtml, saveText, onSave) {
+    $('form-title').textContent = title
+    $('form-sub').textContent = sub || ''
+    $('form-body').innerHTML = '<div class="fm-grid">' + bodyHtml + '</div>'
+    $('form-err').hidden = true
+    $('form-save').textContent = saveText || '保存'
+    $('form-save').disabled = false
+    formState.onSave = onSave
+    $('form-mask').hidden = false
+  }
+
+  function formValues() {
+    var out = {}
+    new FormData($('form-body')).forEach(function (v, k) { out[k] = typeof v === 'string' ? v.trim() : v })
+    return out
+  }
+
+  function submitForm() {
+    if (!formState.onSave) return
+    if (!$('form-body').reportValidity()) return
+    var btn = $('form-save')
+    btn.disabled = true
+    $('form-err').hidden = true
+    Promise.resolve(formState.onSave(formValues())).then(function () {
+      btn.disabled = false
+      $('form-mask').hidden = true
+    }).catch(function (err) {
+      btn.disabled = false
+      if (err && err.auth) { $('form-mask').hidden = true; handleApiError(err); return }
+      $('form-err').textContent = (err && err.message) || '保存失败'
+      $('form-err').hidden = false
+    })
+  }
+
+  function openRegister() {
+    openForm('注册医生账号', '需要管理员发的邀请码。注册后你就是本院的管理员账号。',
+      field('邀请码', 'registration_code', { type: 'password', required: true }) +
+      field('手机号（登录用）', 'phone', { type: 'tel', required: true, attrs: ' pattern="1[3-9][0-9]{9}"' }) +
+      field('医生姓名', 'name', { required: true }) +
+      field('医院 / 诊所名称', 'clinic_name', { required: true }) +
+      field('密码（至少 10 位）', 'password', { type: 'password', required: true, attrs: ' minlength="10"', full: true }),
+      '注册并登录',
+      function (v) {
+        return api(P + '/clinic/register', 'POST', v).then(function (res) {
+          enterApp({ mode: 'real', token: res.token, staff: res.staff || {}, name: (res.staff || {}).name })
+        })
+      })
+  }
+
+  function openNewCase() {
+    var procs = {}
+    Object.keys(RULES.PROCEDURES || {}).forEach(function (k) { procs[k] = RULES.PROCEDURES[k].label })
+    var pets = {}
+    ;(state.data.cases || []).forEach(function (c) { if (c.pet_id) pets[c.pet_id] = c })
+    var petOpts = { '': '新宠物' }
+    Object.keys(pets).forEach(function (id) { petOpts[id] = pets[id].pet_name + ' · ' + pets[id].owner_phone })
+    openForm('新建跟诊病例', '出院时开单。家长手机号是认领的钥匙，必须是家长本人在用的那个。',
+      field('已有宠物（同一只再次治疗）', 'pet_id', { options: petOpts, full: true }) +
+      field('家长手机号', 'owner_phone', { type: 'tel', required: true, attrs: ' pattern="1[3-9][0-9]{9}"' }) +
+      field('宠物名', 'pet_name', { required: true }) +
+      field('物种', 'species', { options: { cat: '猫', dog: '犬' } }) +
+      field('品种', 'breed') +
+      field('手术 / 跟诊类型', 'procedure', { options: procs }) +
+      field('伤口类型', 'wound_type', { options: WOUND_TYPES, value: 'surgical_incision_closed' }) +
+      field('伤口部位', 'wound_site', { placeholder: '如：腹中线' }) +
+      field('手术 / 受伤日期', 'surgery_date', { type: 'date', value: SCH.todayKey(), required: true }) +
+      field('跟诊天数', 'days', { type: 'number', value: '14', attrs: ' min="1" max="365"', required: true }) +
+      field('医嘱备注（家长看不到，AI 读图会参考）', 'doctor_note', { textarea: true, full: true }),
+      '开单',
+      function (v) {
+        v.days = parseInt(v.days, 10)
+        if (!v.pet_id) delete v.pet_id
+        return api(P + '/clinic/cases', 'POST', v).then(function (res) {
+          var c = res.case
+          toast(c.owner_id ? '已开单，家长已自动绑定' : '已开单。让家长在小程序授权手机号即可认领；兜底认领码 ' + c.claim_code)
+          state.currentId = c.id
+          state.filter = 'all'
+          return loadReal().then(afterLoad)
+        })
+      })
+    // 选已有宠物时带出资料
+    var sel = $('form-body').querySelector('[name=pet_id]')
+    var proc = $('form-body').querySelector('[name=procedure]')
+    sel.addEventListener('change', function () {
+      var c = pets[sel.value]
+      if (!c) return
+      ;['owner_phone', 'pet_name', 'species', 'breed'].forEach(function (k) {
+        var el = $('form-body').querySelector('[name=' + k + ']')
+        if (el) el.value = c[k] || ''
+      })
+    })
+    proc.addEventListener('change', function () {
+      var p = RULES.PROCEDURES[proc.value]
+      if (p && p.days) $('form-body').querySelector('[name=days]').value = p.days
+    })
+  }
+
+  function openProfile() {
+    var p = state.profile || {}
+    openForm('医生简介', '家长在小程序里看到的就是这些。',
+      field('姓名', 'name', { value: p.name, required: true }) +
+      field('职称', 'title', { value: p.title }) +
+      field('简介', 'bio', { textarea: true, value: p.bio, full: true }),
+      '保存',
+      function (v) {
+        return api(P + '/clinic/profile', 'PUT', v).then(function (res) {
+          state.profile = res.profile || state.profile
+          toast('已保存')
+          afterLoad()
+        })
+      })
   }
 
   function renderAll() {
@@ -693,6 +897,11 @@
     })
 
     $('cal-save').addEventListener('click', saveSchedule)
+    $('btn-new-case').addEventListener('click', openNewCase)
+    $('btn-profile').addEventListener('click', openProfile)
+    $('form-cancel').addEventListener('click', function () { $('form-mask').hidden = true })
+    $('form-save').addEventListener('click', submitForm)
+    $('form-body').addEventListener('submit', function (e) { e.preventDefault(); submitForm() })
 
     // 改判
     $('override-cancel').addEventListener('click', function () { $('override-mask').hidden = true })
@@ -1259,6 +1468,7 @@
     $('gate-demo').addEventListener('click', function () {
       enterApp({ mode: 'demo', name: '演示医生' })
     })
+    $('gate-register').addEventListener('click', openRegister)
 
     $('gate-form').addEventListener('submit', function (e) {
       e.preventDefault()
@@ -1304,6 +1514,7 @@
   function afterLoad() {
     state.selectedReport = null
     var tag = $('mode-tag')
+    Array.prototype.forEach.call(document.querySelectorAll('.real-only'), function (el) { el.hidden = !isReal() })
     if (isReal()) {
       tag.textContent = '已连接 · ' + (state.profile.name || '') + (state.profile.title ? ' ' + state.profile.title : '')
       tag.classList.add('real')
