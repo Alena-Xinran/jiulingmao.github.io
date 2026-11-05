@@ -178,39 +178,26 @@ p { margin: 0; }
 .stage {
   position: relative; height: 420px;
   border: 2.5px solid var(--ink); border-radius: 34px 28px 38px 26px;
-  background:
-    linear-gradient(180deg, #fde9c9 0%, #fbdcae 62%, transparent 62%),
-    repeating-linear-gradient(90deg, #e9c48f 0 46px, #e2b983 46px 48px);
+  background: #f6dba8;
   box-shadow: 6px 6px 0 var(--ink);
   overflow: hidden;
   touch-action: manipulation;
 }
-.stage::before { /* 窗 */
-  content: ""; position: absolute; left: 8%; top: 9%; width: 30%; height: 38%;
-  border: 2.5px solid var(--ink); border-radius: 14px;
-  background:
-    linear-gradient(90deg, transparent 48%, var(--ink) 48% 52%, transparent 52%),
-    linear-gradient(0deg, transparent 48%, var(--ink) 48% 52%, transparent 52%),
-    linear-gradient(160deg, #fff6df, #ffe0a6);
-  opacity: .9;
-}
-.stage::after { /* 书架 */
-  content: ""; position: absolute; right: 7%; top: 11%; width: 38%; height: 34%;
-  border-bottom: 3px solid var(--ink);
-  background:
-    linear-gradient(90deg,
-      #c97a4a 0 9%, transparent 9% 11%, #6f9e6a 11% 19%, transparent 19% 21%,
-      #e5a64f 21% 27%, transparent 27% 29%, #8b5a3c 29% 39%, transparent 39% 41%,
-      #d98d7b 41% 47%, transparent 47% 52%, #7fa6c9 52% 60%, transparent 60% 62%,
-      #c97a4a 62% 70%, transparent 70% 73%, #e5a64f 73% 82%, transparent 82% 84%, #6f9e6a 84% 92%) bottom / 100% 72% no-repeat;
-}
+.stage .scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.stage .scene .rays { animation: rays 6s ease-in-out infinite; }
+.stage .scene .sunspot { animation: rays 6s ease-in-out infinite reverse; }
+.stage .scene .motes circle { animation: mote 7s ease-in-out infinite; transform-box: fill-box; }
+.stage .scene .plant { transform-origin: 550px 330px; animation: sway 5s ease-in-out infinite; }
+@keyframes rays { 0%, 100% { opacity: 1; } 50% { opacity: .65; } }
+@keyframes mote { 0% { transform: translate(0, 0); opacity: 0; } 20% { opacity: .9; } 50% { transform: translate(10px, -22px); } 80% { opacity: .9; } 100% { transform: translate(-6px, -44px); opacity: 0; } }
+@keyframes sway { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(1.6deg); } }
 .stage .shop-sign {
   position: absolute; left: 50%; top: 14px; transform: translateX(-50%) rotate(-2deg); z-index: 2;
   font-family: var(--hand); font-size: 17px; background: var(--card);
   border: 2px solid var(--ink); border-radius: 10px; padding: 2px 14px; white-space: nowrap;
 }
-.stage .cat-niangao { position: absolute; left: 20%; bottom: 26px; width: 44%; max-width: 250px; z-index: 3; }
-.stage .cat-guotie { position: absolute; right: 9%; bottom: 22px; width: 28%; max-width: 160px; z-index: 3; }
+.stage .cat-niangao { position: absolute; left: 24%; bottom: 18px; width: 48%; max-width: 280px; z-index: 3; }
+.stage .cat-guotie { position: absolute; right: 5%; bottom: 16px; width: 25%; max-width: 150px; z-index: 3; }
 .stage .can { position: absolute; left: 6%; bottom: 30px; z-index: 4; }
 .stage .payslip {
   position: absolute; left: 4%; bottom: 92px; z-index: 6; width: max-content; max-width: 46%;
@@ -223,15 +210,29 @@ p { margin: 0; }
 .stage .payslip small { display: block; font-size: 15px; color: var(--green); margin-top: 2px; }
 @media (max-width: 520px) {
   .stage { height: 340px; }
-  .stage .cat-niangao { left: 16%; width: 50%; }
-  .stage .cat-guotie { right: 5%; width: 31%; }
+  .stage .cat-niangao { left: 18%; width: 54%; }
+  .stage .cat-guotie { right: 3%; width: 29%; }
 }
 
 /* ───────── 猫（SVG 由 cats.js 画） ───────── */
 .cat { position: relative; display: block; cursor: pointer; background: none; border: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 .cat svg { width: 100%; height: auto; overflow: visible; display: block; }
 .cat .c-stroke { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.cat .c-tail { transform-origin: 150px 196px; animation: tail 3.2s ease-in-out infinite; }
+.cat .c-tail { transform-origin: 140px 212px; animation: tail 3.6s ease-in-out infinite; }
+.cat .c-ear { transform-box: fill-box; transition: transform .18s; }
+.cat .c-ear-l { transform-origin: 70% 100%; }
+.cat .c-ear-r { transform-origin: 30% 100%; }
+.cat.twitch-l .c-ear-l { transform: rotate(-12deg); }
+.cat.twitch-r .c-ear-r { transform: rotate(12deg); }
+.cat:hover .c-ear-l { transform: rotate(-6deg); }
+.cat:hover .c-ear-r { transform: rotate(6deg); }
+.cat.slowblink .c-eye { transform: scaleY(0.1); transition: transform .35s ease; }
+.cat .c-body { animation: breathe 3.4s ease-in-out infinite; }
+.cat .c-meow { display: none; }
+.cat.meowing .c-meow { display: inline; }
+.cat.meowing .c-mouth { display: none; }
+.cat.tilt .c-head { transform: rotate(-9deg); }
+@keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.012, 1.02); } }
 .cat .c-eye { transform-box: fill-box; transform-origin: center; transition: transform .08s; }
 .cat.blink .c-eye { transform: scaleY(0.08); }
 .cat .c-closed { display: none; }
@@ -241,7 +242,7 @@ p { margin: 0; }
 .cat .c-body { transform-origin: 100px 208px; transition: transform .35s cubic-bezier(.3,1.5,.5,1); }
 /* 锅贴：一看镜头就坐直 */
 .cat-guotie .c-head { transform: translateY(8px) rotate(-4deg); }
-.cat-guotie .c-body { transform: scaleY(.95); }
+.cat-guotie .c-body { transform: scaleY(.95); animation: none; }
 .cat-guotie.upright .c-head { transform: translateY(-6px); }
 .cat-guotie.upright .c-body { transform: scaleY(1.04); }
 .cat.hop { animation: hop .45s ease; }
@@ -251,7 +252,7 @@ p { margin: 0; }
 .cat.munch .c-head { animation: munch .22s ease-in-out 6; }
 .cat .zzz { position: absolute; right: 8%; top: 4%; font-family: var(--hand); font-size: 22px; color: var(--ink-soft); display: none; pointer-events: none; }
 .cat.asleep .zzz { display: block; animation: zzz 2.4s ease-in-out infinite; }
-@keyframes tail { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-9deg); } }
+@keyframes tail { 0%, 70%, 100% { transform: rotate(0deg); } 78% { transform: rotate(-10deg); } 86% { transform: rotate(2deg); } 92% { transform: rotate(-6deg); } }
 @keyframes hop { 0% { transform: translateY(0); } 40% { transform: translateY(-18px); } 100% { transform: translateY(0); } }
 @keyframes purr { 0% { transform: translateX(0); } 50% { transform: translateX(1px); } 100% { transform: translateX(-1px); } }
 @keyframes munch { 50% { transform: translateY(5px); } }
