@@ -5,7 +5,7 @@
  */
 @font-face {
   font-family: "KuaiLe";
-  src: url("/assets/site/fonts/kuaile.woff") format("woff");
+  src: url("/assets/site/fonts/kuaile.woff?v=3") format("woff");
   font-display: swap;
 }
 
@@ -496,3 +496,22 @@ dialog .close { position: absolute; right: 14px; top: 10px; background: none; bo
   .timeline::before { left: 34px; right: auto; top: 10px; bottom: 10px; border-top: 0; border-left: 3px dashed rgba(74, 52, 38, .35); }
   .tl { padding: 0 0 0 96px; min-height: 44px; }
 }
+
+/* ───────── 真实检测案例（长报告点开看全图） ───────── */
+.cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.case { padding: 0; overflow: hidden; cursor: zoom-in; text-align: left; font: inherit; color: inherit; transition: transform .18s, box-shadow .18s; }
+.case:hover { transform: translateY(-3px) rotate(-0.5deg); box-shadow: 7px 8px 0 var(--ink); }
+.case img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; object-position: top; border-bottom: 2.5px solid var(--ink); }
+.case-body { display: block; padding: 14px 18px 18px; }
+.case-body b { display: block; font-family: var(--hand); font-weight: 400; font-size: 20px; margin-top: 8px; }
+.case-body span.muted { display: block; font-size: 14px; margin-top: 2px; }
+.case .sticker { transform: rotate(-2deg); font-size: 15px; }
+@media (max-width: 860px) { .cases { grid-template-columns: 1fr 1fr; gap: 16px; } .case-body { padding: 10px 12px 14px; } .case-body b { font-size: 17px; } }
+#image-viewer.tall { max-height: 92vh; overflow-y: auto; max-width: min(520px, calc(100% - 24px)); }
+#image-viewer.tall img { max-height: none; width: 100%; }
+
+/* 小程序码弹窗 */
+.qr-dialog { text-align: center; }
+.qr-dialog img { width: min(260px, 70vw); margin: 14px auto 10px; border-radius: 18px; border: 2.5px solid var(--ink); background: #fff; padding: 10px; }
+.qr-dialog p { font-family: var(--hand); font-size: 19px; }
+.qr-dialog p.muted { font-family: var(--body); font-size: 14px; margin-top: 6px; }

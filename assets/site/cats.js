@@ -594,10 +594,13 @@
       b.addEventListener('click', function () {
         if (!viewer || !viewer.showModal) return;
         var img = b.querySelector('img');
-        viewer.querySelector('img').src = img.currentSrc || img.src;
+        // data-full：点开看完整长图（检测报告），弹窗里可以上下滑
+        viewer.classList.toggle('tall', !!b.dataset.full);
+        viewer.querySelector('img').src = b.dataset.full || img.currentSrc || img.src;
         viewer.querySelector('img').alt = img.alt;
         viewer.querySelector('p').textContent = img.alt;
         viewer.showModal();
+        viewer.scrollTop = 0;
       });
     });
     document.querySelectorAll('dialog').forEach(function (d) {

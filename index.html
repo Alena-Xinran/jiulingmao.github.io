@@ -14,8 +14,8 @@
   <link rel="alternate" hreflang="zh-CN" href="https://www.jiulingmao.com/">
   <link rel="alternate" hreflang="en" href="https://www.mimi.house/">
   <link rel="icon" href="/logo.png">
-  <link rel="stylesheet" href="/assets/site/cute.css?v=2">
-  <script defer src="/assets/site/cats.js?v=2"></script>
+  <link rel="stylesheet" href="/assets/site/cute.css?v=3">
+  <script defer src="/assets/site/cats.js?v=3"></script>
 </head>
 <body>
   <a class="skip" href="#main">跳到正文</a>
@@ -43,7 +43,7 @@
           <h1>希望所有的猫咪<br>都<span class="squiggle">久龄</span></h1>
           <p class="lead">猫很会忍痛，难受也不说。九龄猫用 AI 帮你看懂它的表情、便便和伤口；做完手术，医生每天替你把关。</p>
           <div class="actions">
-            <a class="btn" href="/app/">免费拍一张试试</a>
+            <button class="btn" type="button" data-open="mp-qr">免费拍一张试试</button>
             <a class="btn alt" href="#doors">我是医院 / 医生</a>
           </div>
           <p class="hint">点点年糕，摸摸他的头，或者把<b>罐头</b>拖给他。</p>
@@ -103,6 +103,7 @@
             <span class="num">第一页</span>
             <h3>猫会忍痛</h3>
             <p>难受的时候，它不叫，但脸上会露出来。九龄猫的疼痛检测参考猫疼痛表情量表（FGS），拍一张脸就能看。</p>
+            <p style="margin-top:8px"><a class="hand" href="/app/#cases" style="color:var(--orange-deep)">看看真实检测案例 →</a></p>
           </div>
           <div class="note">
             <span class="num">第二页</span>
@@ -216,6 +217,13 @@
     </div>
   </footer>
 
+  <dialog id="mp-qr" class="qr-dialog" aria-labelledby="mp-qr-title">
+    <button class="close" type="button" aria-label="关闭">×</button>
+    <h3 id="mp-qr-title">九龄猫小程序</h3>
+    <img src="/media/miniprogram-qr.png" alt="九龄猫微信小程序码" width="430" height="430">
+    <p>微信「扫一扫」，打开就能用</p>
+    <p class="muted">在手机上看这页？长按图片识别，或在微信里搜「九龄猫」。也可以 <a href="/app/#get">下载 iPhone App</a>。</p>
+  </dialog>
   <dialog id="login" aria-labelledby="login-title">
     <button class="close" type="button" aria-label="关闭">×</button>
     <h3 id="login-title">医生登录</h3>

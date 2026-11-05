@@ -14,8 +14,8 @@
   <link rel="alternate" hreflang="zh-CN" href="https://www.jiulingmao.com/app/">
   <link rel="alternate" hreflang="en" href="https://www.mimi.house/app/">
   <link rel="icon" href="/logo.png">
-  <link rel="stylesheet" href="/assets/site/cute.css?v=2">
-  <script defer src="/assets/site/cats.js?v=2"></script>
+  <link rel="stylesheet" href="/assets/site/cute.css?v=3">
+  <script defer src="/assets/site/cats.js?v=3"></script>
 </head>
 <body>
   <a class="skip" href="#main">跳到正文</a>
@@ -42,8 +42,8 @@
           <h1>今天的它，<br>和昨天一样<span class="squiggle">好吗？</span></h1>
           <p class="lead">用照片记下你注意到的异常，看看 AI 评估，再和之前的记录比一比。九龄猫把这些日常观察留在一起，方便你照顾，也方便就医时说清楚。</p>
           <div class="actions">
-            <a class="btn" href="#get">开始用九龄猫</a>
-            <a class="btn alt" href="#checks">能检测什么</a>
+            <button class="btn" type="button" data-open="mp-qr">微信小程序</button>
+            <a class="btn alt" href="https://apps.apple.com/cn/app/id6778940906" target="_blank" rel="noopener">App Store 下载</a>
           </div>
           <p class="hint">微信小程序为中文 · iOS App 支持中英文</p>
         </div>
@@ -76,7 +76,26 @@
       </div>
     </section>
 
-    <section class="section tint">
+    <section class="section tint" id="cases">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">真实检测案例</span>
+          <h2>家长们拍的，AI 是这么看的</h2>
+          <p>都是用户上传的真实照片生成的疼痛检测报告，从状态良好到需要留意。点开可以看完整报告。</p>
+        </div>
+        <div class="cases">
+          <button class="card case" type="button" data-zoom data-full="/media/case-1.jpg"><img src="/media/case-1-thumb.jpg" alt="九龄猫疼痛检测报告：状态良好 · 0/18，表情放松、眼神明亮，没有疼痛迹象。" loading="lazy" width="480" height="600"><span class="case-body"><span class="sticker green">状态良好 · 0/18</span><b>表情放松、眼神明亮，没有疼痛迹象。</b><span class="muted">点开看完整报告</span></span></button>
+          <button class="card case" type="button" data-zoom data-full="/media/case-2.jpg"><img src="/media/case-2-thumb.jpg" alt="九龄猫疼痛检测报告：状态良好 · 0/18，舒服地趴着，完全放松。" loading="lazy" width="480" height="600"><span class="case-body"><span class="sticker green">状态良好 · 0/18</span><b>舒服地趴着，完全放松。</b><span class="muted">点开看完整报告</span></span></button>
+          <button class="card case" type="button" data-zoom data-full="/media/case-3.jpg"><img src="/media/case-3-thumb.jpg" alt="九龄猫疼痛检测报告：状态良好 · 0/18，好奇、警觉，很有精神。" loading="lazy" width="480" height="600"><span class="case-body"><span class="sticker green">状态良好 · 0/18</span><b>好奇、警觉，很有精神。</b><span class="muted">点开看完整报告</span></span></button>
+          <button class="card case" type="button" data-zoom data-full="/media/case-4.jpg"><img src="/media/case-4-thumb.jpg" alt="九龄猫疼痛检测报告：状态良好 · 2/18，安静休息，只有轻微的观察项。" loading="lazy" width="480" height="600"><span class="case-body"><span class="sticker green">状态良好 · 2/18</span><b>安静休息，只有轻微的观察项。</b><span class="muted">点开看完整报告</span></span></button>
+          <button class="card case" type="button" data-zoom data-full="/media/case-5.jpg"><img src="/media/case-5-thumb.jpg" alt="九龄猫疼痛检测报告：留意观察 · 9/18，飞机耳、姿态紧张，建议持续观察。" loading="lazy" width="480" height="600"><span class="case-body"><span class="sticker orange">留意观察 · 9/18</span><b>飞机耳、姿态紧张，建议持续观察。</b><span class="muted">点开看完整报告</span></span></button>
+          <button class="card case" type="button" data-zoom data-full="/media/case-6.jpg"><img src="/media/case-6-thumb.jpg" alt="九龄猫疼痛检测报告：留意观察 · 11/18，术后恢复期，需要密切留意变化。" loading="lazy" width="480" height="600"><span class="case-body"><span class="sticker orange">留意观察 · 11/18</span><b>术后恢复期，需要密切留意变化。</b><span class="muted">点开看完整报告</span></span></button>
+        </div>
+        <p class="disclaimer">检测结果仅供参考，不能替代兽医诊断。</p>
+      </div>
+    </section>
+
+    <section class="section">
       <div class="wrap split">
         <div>
           <div class="section-head">
@@ -91,10 +110,13 @@
           </div>
         </div>
         <div class="shots" aria-label="产品截图，左右滑动">
-          <button class="shot" type="button" data-zoom><img src="/media/poster-home.jpg" alt="首页：今天拍了吗" loading="lazy" width="549" height="1184"><span>首页</span></button>
-          <button class="shot" type="button" data-zoom><img src="/media/poster-scan.jpg" alt="一拍即知：选模块拍照" loading="lazy" width="549" height="1187"><span>一拍即知</span></button>
-          <button class="shot" type="button" data-zoom><img src="/media/poster-health.jpg" alt="健康档案：变化看得见" loading="lazy" width="549" height="1187"><span>健康档案</span></button>
-          <button class="shot" type="button" data-zoom><img src="/media/poster-butler.jpg" alt="AI 管家：结合记录答疑" loading="lazy" width="549" height="1187"><span>AI 管家</span></button>
+          <button class="shot" type="button" data-zoom><img src="/media/zh-home.jpg" alt="首页：拍一拍，早知道" loading="lazy" width="540" height="1170"><span>首页</span></button>
+          <button class="shot" type="button" data-zoom><img src="/media/zh-face.jpg" alt="疼痛检测报告：评分和观察建议" loading="lazy" width="540" height="1170"><span>疼痛检测</span></button>
+          <button class="shot" type="button" data-zoom><img src="/media/zh-teeth.jpg" alt="牙齿检测报告" loading="lazy" width="540" height="1170"><span>牙齿检测</span></button>
+          <button class="shot" type="button" data-zoom><img src="/media/zh-meow.jpg" alt="猫语翻译" loading="lazy" width="540" height="1170"><span>猫语翻译</span></button>
+          <button class="shot" type="button" data-zoom><img src="/media/zh-record.jpg" alt="健康档案：疼痛趋势一目了然" loading="lazy" width="540" height="1170"><span>健康档案</span></button>
+          <button class="shot" type="button" data-zoom><img src="/media/zh-butler.jpg" alt="AI 管家：结合这只猫的记录答疑" loading="lazy" width="540" height="1170"><span>AI 管家</span></button>
+          <button class="shot" type="button" data-zoom><img src="/media/zh-moments.jpg" alt="猫咪朋友圈：大家的猫今天怎么样" loading="lazy" width="540" height="1170"><span>猫咪朋友圈</span></button>
         </div>
       </div>
     </section>
@@ -136,7 +158,8 @@
           <div class="grid-2" style="margin-top:24px;text-align:left">
             <div class="card" style="box-shadow:3px 3px 0 var(--ink)">
               <h3 style="font-size:24px">微信小程序</h3>
-              <p style="margin-top:6px">微信 → 搜一搜 → 输入「九龄猫」→ 点小程序。打开就能用。</p>
+              <p style="margin-top:6px;margin-bottom:14px">微信扫码，或者搜一搜「九龄猫」，打开就能用。</p>
+              <button class="btn small" type="button" data-open="mp-qr">显示小程序码</button>
             </div>
             <div class="card" style="box-shadow:3px 3px 0 var(--ink)">
               <h3 style="font-size:24px">iPhone App</h3>
@@ -193,6 +216,13 @@
       <a href="/doctor/"><b>九龄猫问诊工作台</b><span>家长发来的问诊和居家检测</span></a>
     </div>
     <p class="disclaimer">还没有账号？<a href="/followup/#pilot">医院申请试点</a>，我们帮你开通。</p>
+  </dialog>
+  <dialog id="mp-qr" class="qr-dialog" aria-labelledby="mp-qr-title">
+    <button class="close" type="button" aria-label="关闭">×</button>
+    <h3 id="mp-qr-title">九龄猫小程序</h3>
+    <img src="/media/miniprogram-qr.png" alt="九龄猫微信小程序码" width="430" height="430">
+    <p>微信「扫一扫」，打开就能用</p>
+    <p class="muted">在手机上看这页？长按图片识别，或在微信里搜「九龄猫」。</p>
   </dialog>
   <dialog id="image-viewer" aria-label="截图">
     <button class="close" type="button" aria-label="关闭">×</button>
