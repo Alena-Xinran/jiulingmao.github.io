@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "generated_at": "2026-04-18 17:10:00",
+  "purpose": "Frontend human-to-cat audio selection for three priority phrases.",
+  "caveat": "These are scene-matched cat sound effects, not scientific ground-truth cat-language translations.",
+  "source": {
+    "provider": "Mixkit",
+    "page": "https://mixkit.co/free-sound-effects/cat/",
+    "license": "https://mixkit.co/license/"
+  },
+  "selected": [
+    {
+      "preset_key": "can_food",
+      "text": "过来吃罐罐",
+      "semantic_target": "f160A Wet food / food anticipation",
+      "audio_file": "can_food.wav",
+      "mixkit_item_id": 92,
+      "mixkit_title": "Cartoon kitty begging meow",
+      "source_fit": "begging meow 更接近索食/期待食物场景。",
+      "ui_note": "用于吃罐罐场景示意，不声明为 FGC ground truth。"
+    },
+    {
+      "preset_key": "love_you",
+      "text": "我爱你",
+      "semantic_target": "f240A Greeting / f230A Liking",
+      "audio_file": "love_you.wav",
+      "mixkit_item_id": 93,
+      "mixkit_title": "Sweet kitty meow",
+      "source_fit": "sweet meow 更接近亲近/友好表达。",
+      "ui_note": "用于亲近陪伴场景示意，不声明为逐句直译。"
+    },
+    {
+      "preset_key": "no",
+      "text": "不可以！",
+      "semantic_target": "f265A Displeasure / boundary cue",
+      "audio_file": "no.wav",
+      "mixkit_item_id": 94,
+      "mixkit_title": "Angry cartoon kitty meow",
+      "source_fit": "angry meow 更接近边界/制止场景。",
+      "ui_note": "用于轻度制止场景示意，不建议反复大声播放。"
+    },
+    {
+      "preset_key": "sleep_purr",
+      "text": "睡觉觉",
+      "semantic_target": "f220A Relaxation / sleep comfort",
+      "audio_file": "sleep_purr.wav",
+      "mixkit_item_id": 96,
+      "mixkit_title": "Big wild cat long purr",
+      "source_fit": "long purr 更接近放松/安抚氛围。",
+      "ui_note": "用于睡前安抚示意；来源为 wild cat purr，建议低音量播放。"
+    }
+  ],
+  "candidate_notes": [
+    "Pixabay 上有更贴近标题的候选，如 Excited Cat Meowing - Anticipating Food、Purring Cat、Angry Cat Hissing and Growling，但当前下载直链被 Cloudflare 拦截，暂未写入包内。",
+    "后续若能拿到可稳定下载的授权文件，可优先替换这三条。"
+  ]
+}

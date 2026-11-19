@@ -1,0 +1,60 @@
+<!-- female doctor silhouette with stethoscope -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor">
+  <!-- 头发 + 头部（face 由 even-odd 镂空） -->
+  <path fill-rule="evenodd" d="
+    M256 44
+    C164 44 100 118 100 214
+    C100 244 108 270 120 290
+    C110 310 108 332 116 352
+    C82 360 58 384 46 414
+    C36 440 32 462 30 488
+    L30 500
+    L482 500
+    L482 488
+    C480 462 476 440 466 414
+    C454 384 430 360 396 352
+    C404 332 402 310 392 290
+    C404 270 412 244 412 214
+    C412 118 348 44 256 44 Z
+
+    M256 118
+    C206 118 174 156 174 204
+    L174 290
+    C200 290 228 294 240 306
+    L240 340 L272 340 L272 306
+    C284 294 312 290 338 290
+    L338 204
+    C338 156 306 118 256 118 Z
+  "/>
+
+  <!-- 肩部蝴蝶结式外套下摆（左右两片） -->
+  <path d="M150 360
+    C120 374 98 396 88 424
+    C82 442 78 462 76 484
+    L76 500 L232 500 L232 420 L212 374 Z"/>
+  <path d="M362 360
+    C392 374 414 396 424 424
+    C430 442 434 462 436 484
+    L436 500 L280 500 L280 420 L300 374 Z"/>
+
+  <!-- V 领三角（负形，挖成白色显示衣领 V 口） -->
+  <path d="M214 358 L256 470 L298 358 Z" fill="#fff"/>
+
+  <!-- 衣领两翼（左、右各一片，让 V 有厚度） -->
+  <path d="M200 354 L214 358 L232 400 L228 440 Z"/>
+  <path d="M312 354 L298 358 L280 400 L284 440 Z"/>
+
+  <!-- 听诊器：左管 -->
+  <path d="M224 346
+           C196 370 178 410 196 446"
+        stroke="currentColor" stroke-width="14" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 听诊器：右管绕到胸前 chest piece -->
+  <path d="M288 346
+           C316 370 334 410 316 446
+           C306 460 298 472 308 488"
+        stroke="currentColor" stroke-width="14" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- chest piece -->
+  <circle cx="308" cy="494" r="14"/>
+</svg>
